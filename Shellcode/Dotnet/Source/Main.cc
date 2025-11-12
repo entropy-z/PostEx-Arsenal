@@ -71,6 +71,18 @@ auto DECLFN DotnetExec(
     SECURITY_ATTRIBUTES SecAttr = { 0 };
 
     auto DotnetCleanup = [&]() {
+        if ( Version ) {
+            Heap::Free( Version );
+        }
+
+        if ( Arguments ) {
+            Heap::Free( Arguments );
+        }
+
+        if ( AppDomName ) {
+            Heap::Free( AppDomName );
+        }
+
         if ( BckpStdout != INVALID_HANDLE_VALUE ) {
             Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, BckpStdout );
         }

