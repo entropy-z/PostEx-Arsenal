@@ -63,8 +63,6 @@ auto DECLFN Parser::New(
     parser->Length   = ArgSize;
     parser->Size     = ArgSize;
 
-    Instance->Win32.DbgPrint("buff: %d %p\n", ArgSize, bufferPtr);
-
     Instance->Ctx.ExecMethod   = ExecMethod;
     Instance->Ctx.ForkCategory = ForkCategory;
     Instance->Ctx.Bypass       = Bypass;
@@ -96,8 +94,6 @@ auto DECLFN Parser::Int32(
     G_INSTANCE
 
     INT32 intBytes = 0;
-
-   
 
     Mem::Copy( &intBytes, parser->Buffer, 4 );
 

@@ -417,7 +417,6 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
 
     HRESULT Result = S_OK;
 
-    ULONG TrashPrm  = Parser::Int32( &Psr );
     ULONG Length    = 0;
     BYTE* Buffer    = Parser::Bytes( &Psr, &Length );
  
@@ -435,12 +434,8 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     LoadAdds( &Instance );
 
     WCHAR wArguments[MAX_PATH*2]  = { 0 };
-    WCHAR wVersion[MAX_PATH*2]    = { 0 };
-    WCHAR wAppDomName[MAX_PATH*2] = { 0 };
-
-    Instance.Win32.DbgPrint("arg: %s %p\n", wArguments, wArguments);
-    Instance.Win32.DbgPrint("vers: %s %p\n", wVersion, wVersion);
-    Instance.Win32.DbgPrint("appdom: %s %p\n", wAppDomName, wAppDomName);
+    WCHAR wVersion[20]    = { 0 };
+    WCHAR wAppDomName[50] = { 0 };
 
     Str::CharToWChar( wArguments, Arguments, ArgumentsL );
     Str::CharToWChar( wVersion, FmVersion, VersionL );
