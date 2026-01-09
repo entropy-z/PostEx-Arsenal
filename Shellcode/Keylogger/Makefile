@@ -1,4 +1,4 @@
-NAME   := dotnet_assembly
+NAME   := keylogger_assembly
 
 BUILD_PATH ?= .
 
