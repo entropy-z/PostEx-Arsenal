@@ -261,6 +261,7 @@ struct _INSTANCE {
         DECLAPI(GetKeyState);
         DECLAPI(ToUnicode);
         DECLAPI(MapVirtualKeyW);
+        DECLAPI(WriteFile);
 
     } Win32;
 
