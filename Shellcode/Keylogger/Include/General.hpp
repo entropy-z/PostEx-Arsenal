@@ -182,6 +182,7 @@ struct _INSTANCE {
         UPTR KernelBase;
         UPTR Kernel32;
         UPTR Ntdll;
+		UPTR Msvcrt;
 
         DECLAPI( NtClose );
         DECLAPI( DbgPrint );
@@ -266,6 +267,10 @@ struct _INSTANCE {
         DECLAPI(ToUnicode);
         DECLAPI(MapVirtualKeyW);
         DECLAPI(HeapFree);
+
+        int(__cdecl* swprintf)(wchar_t*, SIZE_T, const wchar_t*, ...);
+        size_t(__cdecl* wcslen)(const wchar_t* wcs);
+        int (__cdecl* wcsncmp)(const wchar_t* wcs1, const wchar_t* wcs2, size_t num);
 
     } Win32;
 
