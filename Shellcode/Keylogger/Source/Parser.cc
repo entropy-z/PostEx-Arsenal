@@ -31,17 +31,15 @@ auto DECLFN Parser::New(
     ULONG PipeNameL = 0;
     CHAR* PipeName  = nullptr;
 
-    if ( ExecMethod == KH_METHOD_FORK ) {
-        PipeNameL = *(ULONG*)bufferPtr;
-        bufferPtr += sizeof(ULONG);
+    
+    PipeNameL = *(ULONG*)bufferPtr;
+    bufferPtr += sizeof(ULONG);
         
-        PipeName = Heap::Alloc<CHAR*>( PipeNameL );
-        Mem::Copy( PipeName, bufferPtr, PipeNameL );
-        bufferPtr += PipeNameL;
+    PipeName = Heap::Alloc<CHAR*>( PipeNameL );
+    Mem::Copy( PipeName, bufferPtr, PipeNameL );
+    bufferPtr += PipeNameL;
 
-        Instance->Pipe.Name = PipeName;
-        
-    }
+    Instance->Pipe.Name = PipeName;
 
     ULONG ArgSize = *(ULONG*)bufferPtr;
     bufferPtr    += sizeof(ULONG);
