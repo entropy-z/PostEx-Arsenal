@@ -253,5 +253,5 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     Instance.Win32.RtlUserThreadStart     = (decltype(Instance.Win32.RtlUserThreadStart))LoadApi(Ntdll, HashStr("RtlUserThreadStart"));
     Instance.Win32.BaseThreadInitThunk    = (decltype(Instance.Win32.BaseThreadInitThunk))LoadApi(Kernel32, HashStr("BaseThreadInitThunk"));
 
-    Reflect( Buffer, Length, Arguments );
+    //Reflect( Buffer, Length, Arguments );
 }

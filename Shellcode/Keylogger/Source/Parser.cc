@@ -65,7 +65,6 @@ auto DECLFN Parser::New(
     Instance->Ctx.ForkCategory = ForkCategory;
     Instance->Ctx.Bypass       = Bypass;
     Instance->Ctx.IsSpoof      = Spoof;
-    
 }
 
 auto DECLFN Parser::Pad(
