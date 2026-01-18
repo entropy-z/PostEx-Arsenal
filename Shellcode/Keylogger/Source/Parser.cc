@@ -50,11 +50,11 @@ auto DECLFN Parser::New(
         return;
     }
 
-    // Instance->Win32.DbgPrint("exec mtd: %d\n", ExecMethod);
-    // Instance->Win32.DbgPrint("fork cat: %d\n", ForkCategory);
-    // Instance->Win32.DbgPrint("spoof: %d\n", Spoof);
-    // Instance->Win32.DbgPrint("bypass: %d\n", Bypass);
-    // Instance->Win32.DbgPrint("pipename: %s\n", PipeName);
+    Instance->Win32.DbgPrint("exec mtd: %d\n", ExecMethod);
+    Instance->Win32.DbgPrint("fork cat: %d\n", ForkCategory);
+    Instance->Win32.DbgPrint("spoof: %d\n", Spoof);
+    Instance->Win32.DbgPrint("bypass: %d\n", Bypass);
+    Instance->Win32.DbgPrint("pipename: %s\n", PipeName);
     
     Mem::Copy( parser->Original, bufferPtr, ArgSize );
     parser->Buffer   = parser->Original;
