@@ -240,6 +240,7 @@ struct _INSTANCE {
         DECLAPI( NtGetContextThread );
         DECLAPI( NtContinue );
         DECLAPI( RtlCaptureContext );
+		DECLAPI( NtDelayExecution );
 
         DECLAPI( RtlAddVectoredExceptionHandler );
         DECLAPI( RtlRemoveVectoredExceptionHandler );
@@ -261,6 +262,7 @@ struct _INSTANCE {
         DECLAPI(CreateWindowExW);
         DECLAPI(RegisterRawInputDevices);
         DECLAPI(GetMessageW);
+		DECLAPI(PeekMessageW);
 		DECLAPI(PostMessageW);
         DECLAPI(TranslateMessage);
         DECLAPI(DispatchMessageW);

