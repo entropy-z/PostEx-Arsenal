@@ -261,6 +261,7 @@ struct _INSTANCE {
         DECLAPI(CreateWindowExW);
         DECLAPI(RegisterRawInputDevices);
         DECLAPI(GetMessageW);
+		DECLAPI(PostMessageW);
         DECLAPI(TranslateMessage);
         DECLAPI(DispatchMessageW);
         DECLAPI(PostQuitMessage);
