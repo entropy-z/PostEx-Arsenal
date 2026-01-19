@@ -192,6 +192,7 @@ struct _INSTANCE {
         UPTR Kernel32;
         UPTR Ntdll;
 		UPTR Msvcrt;
+		UPTR User32;
 
         DECLAPI( NtClose );
         DECLAPI( DbgPrint );
