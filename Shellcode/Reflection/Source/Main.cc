@@ -17,11 +17,18 @@ auto DECLFN LibLoad(CHAR* LibName) -> UPTR {
 auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 	UPTR Ntdll = LoadModule(HashStr("ntdll.dll"));
 	UPTR Kernel32 = LoadModule(HashStr("kernel32.dll"));
+	UPTR Msvcrt = LoadModule(HashStr("msvcrt.dll"));
 	UPTR Shell32 = LoadModule(HashStr("shell32.dll"));
 
 	Instance->Win32.LoadLibraryA = (decltype(Instance->Win32.LoadLibraryA))LoadApi(Kernel32, HashStr("LoadLibraryA"));
 
 	if (!Shell32) LibLoad("shell32.dll");
+
+	Instance->Win32.swprintf = (decltype(Instance->Win32.swprintf))LoadApi(Msvcrt, HashStr("swprintf"));
+	Instance->Win32.wcslen = (decltype(Instance->Win32.wcslen))LoadApi(Msvcrt, HashStr("wcslen"));
+	Instance->Win32.HeapAlloc = (decltype(Instance->Win32.HeapAlloc))LoadApi(Kernel32, HashStr("HeapAlloc"));
+	Instance->Win32.HeapFree = (decltype(Instance->Win32.HeapFree))LoadApi(Kernel32, HashStr("HeapFree"));
+	Instance->Win32.swprintfw = (decltype(Instance->Win32.swprintfw))LoadApi(Msvcrt, HashStr("swprintfW"));
 
 	Instance->Win32.RtlAllocateHeap = (decltype(Instance->Win32.RtlAllocateHeap))LoadApi(Ntdll, HashStr("RtlAllocateHeap"));
 	Instance->Win32.RtlReAllocateHeap = (decltype(Instance->Win32.RtlReAllocateHeap))LoadApi(Ntdll, HashStr("RtlReAllocateHeap"));
@@ -294,6 +301,40 @@ auto DECLFN FixRel(
 	return;
 }
 
+// Fix command line arguments
+auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
+	G_INSTANCE
+		INT     ArgC = 0;
+
+	WCHAR* wNewCommand = nullptr;
+	PRTL_USER_PROCESS_PARAMETERS	pParam = ((PPEB)__readgsqword(0x60))->ProcessParameters;
+	Instance->Win32.RtlSecureZeroMemory(pParam->CommandLine.Buffer, pParam->CommandLine.Length * sizeof(WCHAR));
+
+	if(wArguments) {
+		if (!(wNewCommand = reinterpret_cast<WCHAR*>(Instance->Win32.HeapAlloc(Instance->Win32.GetProcessHeap(), HEAP_ZERO_MEMORY, ((Instance->Win32.wcslen(wArguments) + pParam->ImagePathName.Length) * sizeof(WCHAR) + sizeof(WCHAR)))))) {
+			return;
+		}
+		Instance->Win32.swprintfw(
+			wNewCommand,
+			L"%s %s",
+			pParam->ImagePathName.Buffer,
+			wArguments
+		);
+
+		Instance->Win32.lstrcpyW(pParam->CommandLine.Buffer, wNewCommand);
+		pParam->CommandLine.Length = pParam->CommandLine.MaximumLength = Instance->Win32.wcslen(pParam->CommandLine.Buffer) * sizeof(WCHAR) + sizeof(WCHAR);
+		pParam->CommandLine.MaximumLength += sizeof(WCHAR);
+		Instance->Win32.HeapFree(Instance->Win32.GetProcessHeap(), 0, wNewCommand);
+		return;
+	}
+	else
+	{
+		Instance->Win32.lstrcpyW(pParam->CommandLine.Buffer, pParam->ImagePathName.Buffer);
+		pParam->CommandLine.Length = pParam->CommandLine.MaximumLength = Instance->Win32.wcslen(pParam->CommandLine.Buffer) * sizeof(WCHAR) + sizeof(WCHAR);
+		pParam->CommandLine.MaximumLength += sizeof(WCHAR);
+	}
+}
+
 auto DECLFN FixMemPermissions(ULONG_PTR PeBaseAddr, IMAGE_NT_HEADERS* Header, IMAGE_SECTION_HEADER* SecHeader) -> VOID {
 	G_INSTANCE
 	for ( INT i = 0; i < Header->FileHeader.NumberOfSections; i++ ) {
@@ -398,6 +439,8 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	FixMemPermissions((ULONG_PTR)PeBaseAddr, Header, SecHeader);
 
 	BOOL isDllFile = (Header->FileHeader.Characteristics & IMAGE_FILE_DLL) ? TRUE : FALSE;
+
+	FixArguments(Arguments);
 
 	// Set Exception handlers
 	FixExp(PeBaseAddr, ExceptDir);

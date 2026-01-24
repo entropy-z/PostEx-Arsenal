@@ -272,9 +272,11 @@ struct _INSTANCE {
         DECLAPI(RtlSecureZeroMemory);
         DECLAPI(HeapFree);
 
+		int(__cdecl* swprintfw)(wchar_t*, const wchar_t*, ...);
         int(__cdecl* swprintf)(wchar_t*, SIZE_T, const wchar_t*, ...);
         size_t(__cdecl* wcslen)(const wchar_t* wcs);
         int (__cdecl* wcsncmp)(const wchar_t* wcs1, const wchar_t* wcs2, size_t num);
+		int(__cdecl* lstrcpyW)(wchar_t* dest, const wchar_t* src);
 
     } Win32;
 
