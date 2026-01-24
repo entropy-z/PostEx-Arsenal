@@ -140,6 +140,13 @@ struct _STACK_FRAME {
 };
 typedef _STACK_FRAME STACK_FRAME;
 
+auto DECLFN SafePipeWrite(
+    _In_ CONST VOID* Buffer,
+    _In_ DWORD      BytesToWrite
+)->BOOL;
+
+auto DECLFN CreateAndWaitPipe()->BOOL;
+
 #define KH_METHOD_INLINE 0x15
 #define KH_METHOD_FORK   0x20
 
