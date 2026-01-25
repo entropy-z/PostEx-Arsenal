@@ -44,6 +44,7 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 	Instance->Win32.NtProtectVirtualMemory = (decltype(Instance->Win32.NtProtectVirtualMemory))LoadApi(Ntdll, HashStr("NtProtectVirtualMemory"));
 	Instance->Win32.CommandLineToArgvW = (decltype(Instance->Win32.CommandLineToArgvW))LoadApi(Shell32, HashStr("CommandLineToArgvW"));
 
+	Instance->Win32.LdrGetProcedureAddress = (decltype(Instance->Win32.LdrGetProcedureAddress))LoadApi(Ntdll, HashStr("LdrGetProcedureAddress"));
 	Instance->Win32.GetConsoleWindow = (decltype(Instance->Win32.GetConsoleWindow))LoadApi(Kernel32, HashStr("GetConsoleWindow"));
 	Instance->Win32.AllocConsoleWithOptions = (decltype(Instance->Win32.AllocConsoleWithOptions))LoadApi(Kernel32, HashStr("AllocConsoleWithOptions"));
 	Instance->Win32.FreeConsole = (decltype(Instance->Win32.FreeConsole))LoadApi(Kernel32, HashStr("FreeConsole"));
@@ -190,41 +191,31 @@ auto DECLFN FixImp(
 }
 
 // Fix relocations
-auto DECLFN FixRel(
-	_In_ PVOID Base,
-	_In_ UPTR  Delta,
-	_In_ IMAGE_DATA_DIRECTORY* DataDir
-) -> VOID {
-	PIMAGE_BASE_RELOCATION BaseReloc = (PIMAGE_BASE_RELOCATION)( (UPTR)( Base ) + DataDir->VirtualAddress );
-	PIMAGE_RELOC           RelocInf  = { 0 };
-	ULONG_PTR              RelocPtr  = NULL;
+void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir)
+{
+	if (!Delta || !Dir->VirtualAddress || !Dir->Size)
+		return;
 
-	while ( BaseReloc->VirtualAddress ) {
-		
-		RelocInf = (PIMAGE_RELOC)( BaseReloc + 1 ); 
-		RelocPtr = ( (UPTR)( Base ) + BaseReloc->VirtualAddress );
+	auto Reloc = (PIMAGE_BASE_RELOCATION)((UPTR)Base + Dir->VirtualAddress);
+	auto End = (UPTR)Reloc + Dir->Size;
 
-		while ( (BYTE*)( RelocInf ) != (BYTE*)( BaseReloc ) + BaseReloc->SizeOfBlock ) {
-			switch ( RelocInf->Type ) {
-			case IMAGE_REL_TYPE:
-				*(UINT64*)( RelocPtr + RelocInf->Offset ) += (ULONG_PTR)( Delta ); break;
-			case IMAGE_REL_BASED_HIGHLOW:
-				*(UINT32*)( RelocPtr + RelocInf->Offset ) += (DWORD)( Delta ); break;
-			case IMAGE_REL_BASED_HIGH:
-				*(UINT16*)( RelocPtr + RelocInf->Offset ) += HIWORD( Delta ); break;
-			case IMAGE_REL_BASED_LOW:
-				*(UINT16*)( RelocPtr + RelocInf->Offset ) += LOWORD( Delta ); break;
-			default:
-				break;
-			}
+	while ((UPTR)Reloc < End && Reloc->SizeOfBlock)
+	{
+		auto Count = (Reloc->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+		auto Entry = (PWORD)(Reloc + 1);
+		auto Page = (UPTR)Base + Reloc->VirtualAddress;
 
-			RelocInf++;
+		for (UINT i = 0; i < Count; i++, Entry++)
+		{
+			WORD Type = *Entry >> 12;
+			WORD Offset = *Entry & 0xFFF;
+
+			if (Type == IMAGE_REL_BASED_DIR64)
+				*(UPTR*)(Page + Offset) += Delta;
 		}
 
-		BaseReloc = (PIMAGE_BASE_RELOCATION)RelocInf;
-	};
-
-	return;
+		Reloc = (PIMAGE_BASE_RELOCATION)((UPTR)Reloc + Reloc->SizeOfBlock);
+	}
 }
 
 // Fix command line arguments
@@ -264,6 +255,10 @@ auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 auto DECLFN FixMemPermissions(BYTE* PeBaseAddr, IMAGE_NT_HEADERS* Header, IMAGE_SECTION_HEADER* SecHeader) -> VOID {
 	G_INSTANCE
 	for ( INT i = 0; i < Header->FileHeader.NumberOfSections; i++ ) {
+		
+		if (SecHeader[i].SizeOfRawData == 0)
+			continue;
+
 		ULONG OldProt = NULL;
 		ULONG NewProt = 0;
 		ULONG SecChar = SecHeader[i].Characteristics;
@@ -331,7 +326,7 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 
 	Instance->Win32.DbgPrint("[+] Parsed PE headers.\n");
 
-	SIZE_T RegionSize = Size;
+	SIZE_T RegionSize = Header->OptionalHeader.SizeOfImage;
 
 	__asm("int3");
 	// Allocate memory for PE
@@ -347,36 +342,59 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	Instance->Win32.DbgPrint("[+] Copied PE headers to allocated memory.\n");
 
 	// Copy PE headers
-	for(int i=0; i < Header->FileHeader.NumberOfSections; i++) {
-		Mem::Copy(
-			(PVOID)(PeBaseAddr + SecHeader[i].VirtualAddress),
-			(PVOID)(Buffer + SecHeader[i].PointerToRawData),
-			SecHeader[i].SizeOfRawData
-		);
+	for (int i = 0; i < Header->FileHeader.NumberOfSections; i++) {
+
+		BYTE* dst = PeBaseAddr + SecHeader[i].VirtualAddress;
+		BYTE* src = Buffer + SecHeader[i].PointerToRawData;
+
+		SIZE_T rawSize = SecHeader[i].SizeOfRawData;
+		SIZE_T virtSize = SecHeader[i].Misc.VirtualSize;
+
+		if (rawSize)
+			Mem::Copy(dst, src, rawSize);
+
+		if (virtSize > rawSize)
+			Mem::Set(dst + rawSize, 0, virtSize - rawSize);
 	}
+
+	Instance->Win32.DbgPrint("[+] Copied PE sections to allocated memory.\n");
 
 	// Fix relocations
 	ULONG_PTR Delta = (ULONG_PTR)(PeBaseAddr)-Header->OptionalHeader.ImageBase;
 	FixRel(PeBaseAddr, Delta, RelocDir);
 
+	Instance->Win32.DbgPrint("[+] Fixed PE relocations.\n");
+
 	// Fix IAT
 	if (!FixImp(PeBaseAddr, ImportDir)) {
+		Instance->Win32.DbgPrint("[-] Failed to fix PE imports.\n");
 		return FALSE;
 	}
 
+	Instance->Win32.DbgPrint("[+] Fixed PE imports.\n");
+
 	// Fix memory permissions
 	FixMemPermissions(PeBaseAddr, Header, SecHeader);
+
+	Instance->Win32.DbgPrint("[+] Fixed PE memory permissions.\n");
 
 	BOOL isDllFile = (Header->FileHeader.Characteristics & IMAGE_FILE_DLL) ? TRUE : FALSE;
 
 	FixArguments(Arguments);
 
+	Instance->Win32.DbgPrint("[+] Fixed PE command line arguments.\n");
+
 	// Set Exception handlers
 	FixExp(PeBaseAddr, ExceptDir);
+
+	Instance->Win32.DbgPrint("[+] Fixed PE exception handlers.\n");
 
 	// Call TLS callbacks
 	FixTls(PeBaseAddr, TlsDir);
 
+	Instance->Win32.DbgPrint("[+] Fixed PE TLS callbacks.\n");
+	
+	// Restore stdout and stderr
 	Instance->Win32.SetStdHandle(STD_OUTPUT_HANDLE, BckpStdout);
 	Instance->Win32.SetStdHandle(STD_ERROR_HANDLE, BckpStdout);
 
