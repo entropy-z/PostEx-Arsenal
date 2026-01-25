@@ -79,6 +79,7 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 auto DECLFN AllocVm( PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size, ULONG AllocType, ULONG Protection ) -> NTSTATUS {
 	G_INSTANCE
 
+	Instance->Win32.DbgPrint("[+] Allocating virtual memory: Size=%llu, AllocType=%lu, Protection=%lu\n", *Size, AllocType, Protection);
 	if ( ! Instance->Ctx.IsSpoof ) { 
 		return Instance->Win32.NtAllocateVirtualMemory( 
 			NtCurrentProcess(), Address, ZeroBit, Size, AllocType, Protection  
@@ -304,13 +305,19 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	BckpStdout = Instance->Win32.GetStdHandle(STD_OUTPUT_HANDLE);
 
 	Instance->Win32.DbgPrint("[+] Reflective PE Loader Invoked...\n");
-	if ( *(ULONG*)( Buffer ) != 0x5A4D ) {
+	Instance->Win32.DbgPrint("[+] Buffer Address: %p\n", Buffer);
+	Instance->Win32.DbgPrint("[+] Buffer Size: %d\n", Size);
+	
+	// Validate PE file
+	if ( *(USHORT*)( Buffer ) != 0x5A4D ) {
 		Instance->Win32.DbgPrint("[-] Invalid PE file!\n");
-		Instance->Win32.DbgPrint("[-] First bytes: %X\n", *(ULONG*)(Buffer));
+		Instance->Win32.DbgPrint("[-] First bytes: %x\n", *(ULONG*)(Buffer));
 		return FALSE;
 	}
 	ULONG oldProt = NULL;
 	BYTE* PeBaseAddr = nullptr;
+
+	Instance->Win32.DbgPrint("[+] PE file validated.\n");
 
 	// Parse PE headers
 	IMAGE_NT_HEADERS*     Header    = (IMAGE_NT_HEADERS*)( Buffer + ( (IMAGE_DOS_HEADER*)Buffer )->e_lfanew );
@@ -321,8 +328,13 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	IMAGE_DATA_DIRECTORY* TlsDir    = &Header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
 	IMAGE_DATA_DIRECTORY* RelocDir  = &Header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
 
+	Instance->Win32.DbgPrint("[+] Parsed PE headers.\n");
+
+	__asm("int3");
 	// Allocate memory for PE
-	AllocVm((PVOID*)PeBaseAddr, 0, (SIZE_T*)Size, (MEM_COMMIT | MEM_RESERVE), PAGE_READWRITE);
+	AllocVm((PVOID*)PeBaseAddr, 0, (SIZE_T*)Size, (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
+
+	Instance->Win32.DbgPrint("[+] Allocated memory for PE at: %p\n", PeBaseAddr);
 
 	// Copy PE headers
 	for(int i=0; i < Header->FileHeader.NumberOfSections; i++) {

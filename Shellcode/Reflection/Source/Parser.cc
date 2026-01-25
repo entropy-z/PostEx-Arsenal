@@ -102,7 +102,7 @@ auto DECLFN Parser::Bytes(
     if ( parser->Length < 4 || !parser->Buffer )
         return NULL;
 
-    Instance->Win32.DbgPrint( "%p", parser->Buffer );
+	//Instance->Win32.DbgPrint("[+] Buffer Address: %p\n", parser->Buffer);
 
     Mem::Copy( &Length, parser->Buffer, 4 );
     parser->Buffer += 4;
