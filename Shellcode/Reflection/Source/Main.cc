@@ -131,17 +131,75 @@ auto DECLFN FixTls(
 	}
 }
 
+auto DECLFN ValidateExceptionDirectory(
+	_In_ PVOID Base,
+	_In_ IMAGE_NT_HEADERS* Header
+) -> BOOL {
+	G_INSTANCE
+
+		IMAGE_DATA_DIRECTORY* ExceptDir = &Header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+
+	if (!ExceptDir->Size || !ExceptDir->VirtualAddress) {
+		Instance->Win32.DbgPrint("[*] No exception directory.\n");
+		return TRUE;  // Not having exceptions is okay
+	}
+
+	PIMAGE_RUNTIME_FUNCTION_ENTRY Entry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)((UPTR)Base + ExceptDir->VirtualAddress);
+	DWORD EntryCount = ExceptDir->Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY);
+
+	Instance->Win32.DbgPrint("[+] Validating %lu exception entries...\n", EntryCount);
+
+	for (DWORD i = 0; i < EntryCount; i++) {
+		// BeginAddress and EndAddress should be valid RVAs
+		if (Entry[i].BeginAddress >= Header->OptionalHeader.SizeOfImage) {
+			Instance->Win32.DbgPrint("[-] Exception entry %lu has invalid BeginAddress: 0x%X\n", i, Entry[i].BeginAddress);
+			return FALSE;
+		}
+		if (Entry[i].EndAddress > Header->OptionalHeader.SizeOfImage) {
+			Instance->Win32.DbgPrint("[-] Exception entry %lu has invalid EndAddress: 0x%X\n", i, Entry[i].EndAddress);
+			return FALSE;
+		}
+		if (Entry[i].EndAddress <= Entry[i].BeginAddress) {
+			Instance->Win32.DbgPrint("[-] Exception entry %lu has EndAddress <= BeginAddress\n", i);
+			return FALSE;
+		}
+	}
+
+	Instance->Win32.DbgPrint("[+] Exception directory validation passed.\n");
+	return TRUE;
+}
+
 auto DECLFN FixExp(
 	_In_ PVOID Base,
 	_In_ IMAGE_DATA_DIRECTORY* DataDir
 ) -> VOID {
 	G_INSTANCE
 
-	if ( DataDir->Size ) {
-		PIMAGE_RUNTIME_FUNCTION_ENTRY FncEntry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)( (UPTR)( Base ) + DataDir->VirtualAddress );
-
-		Instance->Win32.RtlAddFunctionTable( (PRUNTIME_FUNCTION)FncEntry, DataDir->Size / sizeof( IMAGE_RUNTIME_FUNCTION_ENTRY ), (UPTR)( Base ) );
+	if (!DataDir || !DataDir->Size || !DataDir->VirtualAddress) {
+		Instance->Win32.DbgPrint("[*] No exception directory present.\n");
+		return;
 	}
+
+	PIMAGE_RUNTIME_FUNCTION_ENTRY FncEntry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)((UPTR)Base + DataDir->VirtualAddress);
+	DWORD EntryCount = DataDir->Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY);
+
+	if (EntryCount == 0) {
+		Instance->Win32.DbgPrint("[*] Exception directory is empty.\n");
+		return;
+	}
+
+	Instance->Win32.DbgPrint("[+] Found %lu exception entries at %p\n", EntryCount, FncEntry);
+
+	BOOL Success = Instance->Win32.RtlAddFunctionTable(
+		(PRUNTIME_FUNCTION)FncEntry,
+		EntryCount,
+		(ULONG64)Base
+	);
+
+	if (!Success)
+		Instance->Win32.DbgPrint("[-] RtlAddFunctionTable failed!\n");
+	else
+		Instance->Win32.DbgPrint("[+] Successfully registered %lu function table entries.\n", EntryCount);
 }
 
 auto DECLFN FixImp(
@@ -423,19 +481,37 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	Instance->Win32.SetStdHandle(STD_OUTPUT_HANDLE, BckpStdout);
 	Instance->Win32.SetStdHandle(STD_ERROR_HANDLE, BckpStdout);
 
+	// Calculate and execute entry point
 	pEntryPoint = (PVOID)(PeBaseAddr + Header->OptionalHeader.AddressOfEntryPoint);
-	if (isDllFile)
-	{
+
+	if (!pEntryPoint) {
+		Instance->Win32.DbgPrint("[-] Invalid entry point calculated.\n");
+		return FALSE;
+	}
+
+	Instance->Win32.DbgPrint("[+] Entry point: %p (RVA: 0x%X)\n", pEntryPoint, Header->OptionalHeader.AddressOfEntryPoint);
+	Instance->Win32.DbgPrint("[+] PE Base: %p\n", PeBaseAddr);
+	Instance->Win32.DbgPrint("[+] Is DLL: %d\n", isDllFile);
+
+	BOOL Result = FALSE;
+
+	if (isDllFile) {
 		typedef BOOL(WINAPI* DLLMAIN)(HINSTANCE, DWORD, LPVOID);
-		((DLLMAIN)pEntryPoint)((HINSTANCE)PeBaseAddr, DLL_PROCESS_ATTACH, NULL);
+
+		Result = ((DLLMAIN)pEntryPoint)((HINSTANCE)PeBaseAddr, DLL_PROCESS_ATTACH, NULL);
+		Instance->Win32.DbgPrint("[+] DLL entry point executed. Result: %d\n", Result);
 	}
-	else
+
+	else 
 	{
-		typedef BOOL(WINAPI* MAIN)();
-		return ((MAIN)pEntryPoint)();
+		typedef int(WINAPI* MAIN)();
+
+		int ExitCode = ((MAIN)pEntryPoint)();
+		Instance->Win32.DbgPrint("[+] EXE entry point executed. Exit code: %d\n", ExitCode);
+		Result = (ExitCode == 0) ? TRUE : FALSE;
 	}
-	
-	return TRUE;
+
+	return Result;
 }
 
 EXTERN_C
