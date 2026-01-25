@@ -202,10 +202,6 @@ struct _INSTANCE {
         DECLAPI( AllocConsoleWithOptions );
         DECLAPI( FreeConsole );
         
-        DECLAPI( CreatePipe );
-        DECLAPI( CreateNamedPipeA );
-        DECLAPI( ConnectNamedPipe );
-        DECLAPI( DisconnectNamedPipe );
         DECLAPI( CreateFileA );
         DECLAPI( WriteFile );
         DECLAPI( ReadFile );
