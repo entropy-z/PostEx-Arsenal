@@ -19,6 +19,10 @@ typedef _Type         IType;
 typedef _MethodInfo   IMethodInfo;
 typedef BindingFlags  IBindingFlags;
 
+#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#define ALIGN_UP(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
+#define ALIGN_DOWN(x, align) ((x) & ~((align) - 1))
+
 #define PIPE_BUFFER_LENGTH  0x10000
 #define DECLAPI( x )       decltype( x ) * x
 #define G_INSTANCE         INSTANCE* Instance = (INSTANCE*)( NtCurrentPeb()->TelemetryCoverageHeader );
@@ -27,6 +31,17 @@ typedef BindingFlags  IBindingFlags;
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 #define NtCurrentThreadID HandleToUlong( NtCurrentTeb()->ClientId.UniqueThread )
+
+#if defined(_WIN64)
+    using IMAGE_THUNK = IMAGE_THUNK_DATA64;
+    #define IMAGE_SNAP_BY_ORDINAL_X IMAGE_SNAP_BY_ORDINAL64
+    #define IMAGE_ORDINAL_X IMAGE_ORDINAL64
+#else
+    using IMAGE_THUNK = IMAGE_THUNK_DATA32;
+    #define IMAGE_SNAP_BY_ORDINAL_X IMAGE_SNAP_BY_ORDINAL32
+    #define IMAGE_ORDINAL_X IMAGE_ORDINAL32
+#endif
+
 
 #define RSL_IMP( w, m ) { \
     for ( int i = 1; i < HashPlural<decltype( Instance->w, m )>(); i++ ) { \

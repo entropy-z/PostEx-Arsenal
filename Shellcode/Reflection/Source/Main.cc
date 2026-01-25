@@ -24,15 +24,19 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 
 	if (!Shell32) LibLoad("shell32.dll");
 
+	Instance->Win32.lstrcpyW = (decltype(Instance->Win32.lstrcpyW))LoadApi(Kernel32, HashStr("lstrcpyW"));
 	Instance->Win32.swprintf = (decltype(Instance->Win32.swprintf))LoadApi(Msvcrt, HashStr("swprintf"));
 	Instance->Win32.wcslen = (decltype(Instance->Win32.wcslen))LoadApi(Msvcrt, HashStr("wcslen"));
 	Instance->Win32.HeapAlloc = (decltype(Instance->Win32.HeapAlloc))LoadApi(Kernel32, HashStr("HeapAlloc"));
 	Instance->Win32.HeapFree = (decltype(Instance->Win32.HeapFree))LoadApi(Kernel32, HashStr("HeapFree"));
 	Instance->Win32.swprintfw = (decltype(Instance->Win32.swprintfw))LoadApi(Msvcrt, HashStr("swprintfW"));
+	Instance->Win32.GetProcessHeap = (decltype(Instance->Win32.GetProcessHeap))LoadApi(Kernel32, HashStr("GetProcessHeap"));
 
 	Instance->Win32.RtlAllocateHeap = (decltype(Instance->Win32.RtlAllocateHeap))LoadApi(Ntdll, HashStr("RtlAllocateHeap"));
 	Instance->Win32.RtlReAllocateHeap = (decltype(Instance->Win32.RtlReAllocateHeap))LoadApi(Ntdll, HashStr("RtlReAllocateHeap"));
 	Instance->Win32.RtlFreeHeap = (decltype(Instance->Win32.RtlFreeHeap))LoadApi(Ntdll, HashStr("RtlFreeHeap"));
+	Instance->Win32.RtlSecureZeroMemory = (decltype(Instance->Win32.RtlSecureZeroMemory))LoadApi(Ntdll, HashStr("RtlSecureZeroMemory"));
+	Instance->Win32.RtlAddFunctionTable = (decltype(Instance->Win32.RtlAddFunctionTable))LoadApi(Ntdll, HashStr("RtlAddFunctionTable"));
 
 	Instance->Win32.DbgPrint = (decltype(Instance->Win32.DbgPrint))LoadApi(Ntdll, HashStr("DbgPrint"));
 	Instance->Win32.NtClose = (decltype(Instance->Win32.NtClose))LoadApi(Ntdll, HashStr("NtClose"));
@@ -102,16 +106,28 @@ auto DECLFN ProtVm( PVOID* Address, SIZE_T* Size, ULONG NewProt, ULONG* OldProt 
 auto DECLFN FixTls(
 	_In_ PVOID Base,
 	_In_ IMAGE_DATA_DIRECTORY* DataDir
-) -> VOID {
-	if ( DataDir->Size ) {
-		PIMAGE_TLS_DIRECTORY TlsDir   = (PIMAGE_TLS_DIRECTORY)( (UPTR)( Base ) + DataDir->VirtualAddress );
-		PIMAGE_TLS_CALLBACK* Callback = (PIMAGE_TLS_CALLBACK*)TlsDir->AddressOfCallBacks;
+) -> VOID
+{
+	if (!DataDir || !DataDir->VirtualAddress || !DataDir->Size)
+		return;
 
-		if ( Callback ) {
-			for ( INT i = 0; Callback[i] != nullptr; ++i ) {
-				Callback[i]( Base, DLL_PROCESS_ATTACH, nullptr );
-			}
-		}
+	auto TlsDir =
+		(PIMAGE_TLS_DIRECTORY)((UPTR)Base + DataDir->VirtualAddress);
+
+	// AddressOfCallBacks is a VA, NOT an RVA
+	auto Callbacks =
+		(PIMAGE_TLS_CALLBACK*)TlsDir->AddressOfCallBacks;
+
+	if (!Callbacks)
+		return;
+
+	for (; *Callbacks; ++Callbacks)
+	{
+		(*Callbacks)(
+			(PVOID)Base,
+			DLL_PROCESS_ATTACH,
+			nullptr
+			);
 	}
 }
 
@@ -131,62 +147,83 @@ auto DECLFN FixExp(
 auto DECLFN FixImp(
 	_In_ PVOID Base,
 	_In_ IMAGE_DATA_DIRECTORY* DataDir
-) -> BOOL {
+) -> BOOL
+{
 	G_INSTANCE
 
-	PIMAGE_IMPORT_DESCRIPTOR ImpDesc = (PIMAGE_IMPORT_DESCRIPTOR)( (UPTR)( Base ) + DataDir->VirtualAddress );
+		if (!DataDir || !DataDir->VirtualAddress || !DataDir->Size)
+			return TRUE;
 
-	for ( ; ImpDesc->Name; ImpDesc++ ) {
+	auto ImpDesc =
+		(PIMAGE_IMPORT_DESCRIPTOR)((UPTR)Base + DataDir->VirtualAddress);
 
-		PIMAGE_THUNK_DATA FirstThunk  = (PIMAGE_THUNK_DATA)( (UPTR)( Base ) + ImpDesc->FirstThunk );
-		PIMAGE_THUNK_DATA OriginThunk = FirstThunk;
-		if (ImpDesc->OriginalFirstThunk)
-			OriginThunk = (PIMAGE_THUNK_DATA)( (UPTR)( Base ) + ImpDesc->OriginalFirstThunk );
+	for (; ImpDesc->Name; ++ImpDesc)
+	{
+		auto FirstThunk =
+			(IMAGE_THUNK*)((UPTR)Base + ImpDesc->FirstThunk);
 
-		PCHAR  DllName     = (CHAR*)( (UPTR)( Base ) + ImpDesc->Name );
-		PVOID  DllBase     = (PVOID)( Instance->Win32.GetModuleHandleA( DllName ) );
+		auto OrigThunk =
+			ImpDesc->OriginalFirstThunk
+			? (IMAGE_THUNK*)((UPTR)Base + ImpDesc->OriginalFirstThunk)
+			: FirstThunk;
 
-		PVOID  FunctionPtr = 0;
-		STRING AnsiString  = { 0 };
+		auto DllName =
+			(CHAR*)((UPTR)Base + ImpDesc->Name);
 
-		if ( !DllBase ) {
-			DllBase = (PVOID)LibLoad( DllName );
-		}
+		PVOID DllBase =
+			Instance->Win32.GetModuleHandleA(DllName);
 
-		if ( !DllBase ) {
+		if (!DllBase)
+			DllBase = (PVOID)LibLoad(DllName);
+
+		if (!DllBase)
 			return FALSE;
-		}
 
-		for ( ; OriginThunk->u1.Function; FirstThunk++, OriginThunk++ ) {
+		for (; OrigThunk->u1.AddressOfData; ++OrigThunk, ++FirstThunk)
+		{
+			PVOID Function = nullptr;
 
-			if ( IMAGE_SNAP_BY_ORDINAL( OriginThunk->u1.Ordinal ) ) {
+			if (IMAGE_SNAP_BY_ORDINAL_X(OrigThunk->u1.Ordinal))
+			{
+				NTSTATUS st =
+					Instance->Win32.LdrGetProcedureAddress(
+						(HMODULE)DllBase,
+						nullptr,
+						IMAGE_ORDINAL_X(OrigThunk->u1.Ordinal),
+						&Function
+					);
 
-				Instance->Win32.LdrGetProcedureAddress( 
-					(HMODULE)DllBase, NULL, IMAGE_ORDINAL( OriginThunk->u1.Ordinal ), &FunctionPtr
-				);
-
-				FirstThunk->u1.Function = (UPTR)( FunctionPtr );
-				if ( !FirstThunk->u1.Function ) return FALSE;
-
-			} else {
-				PIMAGE_IMPORT_BY_NAME Hint = (PIMAGE_IMPORT_BY_NAME)( (UPTR)( Base ) + OriginThunk->u1.AddressOfData );
-
-				{
-					AnsiString.Length        = Str::LengthA( Hint->Name );
-					AnsiString.MaximumLength = AnsiString.Length + sizeof( CHAR );
-					AnsiString.Buffer        = Hint->Name;
-				}
-				
-				Instance->Win32.LdrGetProcedureAddress( 
-					(HMODULE)DllBase, &AnsiString, 0, &FunctionPtr 
-				);
-				FirstThunk->u1.Function = (UPTR)( FunctionPtr );
-
-				if ( !FirstThunk->u1.Function ) return FALSE;
+				if (!NT_SUCCESS(st) || !Function)
+					return FALSE;
 			}
+			else
+			{
+				auto ImportByName =
+					(PIMAGE_IMPORT_BY_NAME)(
+						(UPTR)Base + OrigThunk->u1.AddressOfData
+						);
+
+				ANSI_STRING Name;
+				Name.Buffer = (PCHAR)ImportByName->Name;
+				Name.Length = (USHORT)Str::LengthA(Name.Buffer);
+				Name.MaximumLength = Name.Length + 1;
+
+				NTSTATUS st =
+					Instance->Win32.LdrGetProcedureAddress(
+						(HMODULE)DllBase,
+						&Name,
+						0,
+						&Function
+					);
+
+				if (!NT_SUCCESS(st) || !Function)
+					return FALSE;
+			}
+
+			FirstThunk->u1.Function = (ULONGLONG)Function;
 		}
 	}
-	
+
 	return TRUE;
 }
 
@@ -225,8 +262,9 @@ auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 
 	WCHAR* wNewCommand = nullptr;
 	PRTL_USER_PROCESS_PARAMETERS	pParam = ((PPEB)__readgsqword(0x60))->ProcessParameters;
-	Instance->Win32.RtlSecureZeroMemory(pParam->CommandLine.Buffer, pParam->CommandLine.Length * sizeof(WCHAR));
-
+	
+	Mem::Set(pParam->CommandLine.Buffer, 0, pParam->CommandLine.Length);
+	
 	if(wArguments) {
 		if (!(wNewCommand = reinterpret_cast<WCHAR*>(Instance->Win32.HeapAlloc(Instance->Win32.GetProcessHeap(), HEAP_ZERO_MEMORY, ((Instance->Win32.wcslen(wArguments) + pParam->ImagePathName.Length) * sizeof(WCHAR) + sizeof(WCHAR)))))) {
 			return;
@@ -238,8 +276,27 @@ auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 			wArguments
 		);
 
-		Instance->Win32.lstrcpyW(pParam->CommandLine.Buffer, wNewCommand);
-		pParam->CommandLine.Length = pParam->CommandLine.MaximumLength = Instance->Win32.wcslen(pParam->CommandLine.Buffer) * sizeof(WCHAR) + sizeof(WCHAR);
+		USHORT RequiredLen =
+			(USHORT)(Instance->Win32.wcslen(wNewCommand) * sizeof(WCHAR));
+		if (RequiredLen > pParam->CommandLine.MaximumLength)
+		{
+			PWSTR NewBuf = (PWSTR)Instance->Win32.RtlAllocateHeap(
+				Instance->HeapHandle,
+				HEAP_ZERO_MEMORY,
+				RequiredLen + sizeof(WCHAR)
+			);
+
+			if (!NewBuf)
+				return;
+
+			pParam->CommandLine.Buffer = NewBuf;
+			pParam->CommandLine.MaximumLength =
+				RequiredLen + sizeof(WCHAR);
+		}
+
+		Instance->Win32.lstrcpyW(pParam->CommandLine.Buffer,wNewCommand);
+
+		pParam->CommandLine.Length = RequiredLen;
 		pParam->CommandLine.MaximumLength += sizeof(WCHAR);
 		Instance->Win32.HeapFree(Instance->Win32.GetProcessHeap(), 0, wNewCommand);
 		return;
@@ -280,7 +337,11 @@ auto DECLFN FixMemPermissions(BYTE* PeBaseAddr, IMAGE_NT_HEADERS* Header, IMAGE_
 			}
 		}
 		BYTE*  SectionBase = PeBaseAddr + SecHeader[i].VirtualAddress;
-		SIZE_T SectionSize = SecHeader[i].Misc.VirtualSize;
+		SIZE_T SectionSize =
+			ALIGN_UP(
+				max(SecHeader[i].Misc.VirtualSize, SecHeader[i].SizeOfRawData),
+				Header->OptionalHeader.SectionAlignment
+			);
 
 		ProtVm(
 			(PVOID*) &SectionBase,
