@@ -2747,6 +2747,8 @@ AllocConsoleWithOptions(_In_opt_ PALLOC_CONSOLE_OPTIONS allocOptions, _Out_opt_ 
 #define NtCurrentPeb() ( NtCurrentTeb()->ProcessEnvironmentBlock )
 
 #define NT_SUCCESS( Status )  ( ( (NTSTATUS) (Status) ) >= 0 )
+#define nt_success( status )  ( ( (NTSTATUS) (status) ) >= 0 )
+
 
 /* ========== [ Functions ] ========== */
 

